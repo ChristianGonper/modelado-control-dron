@@ -29,7 +29,7 @@ Base inicial del simulador modular para un dron multirotor. Esta primera fase de
 
 ## Documentación
 
-- [Estado actual del simulador](/C:/Users/chris/Documents/Universidad/TFG/docs/estado_actual_simulador.md)
-- [Backlog técnico recomendado](/C:/Users/chris/Documents/Universidad/TFG/docs/backlog_tecnico.md)
-- [Puntos de extensión](/C:/Users/chris/Documents/Universidad/TFG/docs/extension-points.md)
-- `docs/decisions/`: ADRs de arquitectura y decisiones de diseño por fase
+- [Estado actual del simulador](docs/estado_actual_simulador.md)
+- [Backlog técnico recomendado](docs/backlog_tecnico.md)
+- [Puntos de extensión](docs/extension-points.md)
+- [Decisiones](docs/decisions/): ADRs de arquitectura y decisiones de diseño por fase
