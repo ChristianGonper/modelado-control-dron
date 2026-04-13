@@ -15,7 +15,7 @@ from typing import ClassVar, Mapping, Sequence
 
 from ..control import CascadedController, AttitudeLoopController, PositionLoopController
 from ..core.contracts import TrajectoryReference, VehicleState
-from ..dynamics import RigidBody6DOFDynamics, RigidBodyParameters
+from ..dynamics import AerodynamicEnvironment, RigidBody6DOFDynamics, RigidBodyParameters
 from ..trajectories import TrajectoryContract, build_trajectory_from_config
 
 
@@ -134,11 +134,37 @@ class ScenarioTrajectoryConfig:
 @dataclass(frozen=True, slots=True)
 class ScenarioDisturbanceConfig:
     enabled: bool = False
+    parasitic_drag_enabled: bool = False
+    induced_hover_enabled: bool = False
+    wind_velocity_m_s: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    wind_gust_std_m_s: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    parasitic_drag_area_m2: float | None = None
+    induced_hover_loss_ratio: float | None = None
     observation_position_noise_std_m: float = 0.0
     observation_velocity_noise_std_m_s: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "enabled", bool(self.enabled))
+        object.__setattr__(self, "parasitic_drag_enabled", bool(self.parasitic_drag_enabled))
+        object.__setattr__(self, "induced_hover_enabled", bool(self.induced_hover_enabled))
+        object.__setattr__(self, "wind_velocity_m_s", _coerce_vector(self.wind_velocity_m_s, length=3, field_name="wind_velocity_m_s"))
+        object.__setattr__(self, "wind_gust_std_m_s", _coerce_vector(self.wind_gust_std_m_s, length=3, field_name="wind_gust_std_m_s"))
+        if self.parasitic_drag_area_m2 is not None:
+            object.__setattr__(
+                self,
+                "parasitic_drag_area_m2",
+                _coerce_float(self.parasitic_drag_area_m2, "parasitic_drag_area_m2"),
+            )
+            if self.parasitic_drag_area_m2 < 0.0:
+                raise ValueError("parasitic_drag_area_m2 must be non-negative")
+        if self.induced_hover_loss_ratio is not None:
+            object.__setattr__(
+                self,
+                "induced_hover_loss_ratio",
+                _coerce_float(self.induced_hover_loss_ratio, "induced_hover_loss_ratio"),
+            )
+            if self.induced_hover_loss_ratio < 0.0:
+                raise ValueError("induced_hover_loss_ratio must be non-negative")
         object.__setattr__(
             self,
             "observation_position_noise_std_m",
@@ -156,8 +182,26 @@ class ScenarioDisturbanceConfig:
 
     def is_active(self) -> bool:
         return self.enabled and (
-            self.observation_position_noise_std_m > 0.0 or self.observation_velocity_noise_std_m_s > 0.0
+            self.parasitic_drag_enabled
+            or self.induced_hover_enabled
+            or any(component != 0.0 for component in self.wind_velocity_m_s)
+            or any(component != 0.0 for component in self.wind_gust_std_m_s)
+            or self.observation_position_noise_std_m > 0.0
+            or self.observation_velocity_noise_std_m_s > 0.0
         )
+
+    def physical_flags(self) -> dict[str, object]:
+        return {
+            "enabled": self.enabled,
+            "parasitic_drag_enabled": self.parasitic_drag_enabled,
+            "induced_hover_enabled": self.induced_hover_enabled,
+            "wind_velocity_m_s": self.wind_velocity_m_s,
+            "wind_gust_std_m_s": self.wind_gust_std_m_s,
+            "parasitic_drag_area_m2": self.parasitic_drag_area_m2,
+            "induced_hover_loss_ratio": self.induced_hover_loss_ratio,
+            "observation_position_noise_std_m": self.observation_position_noise_std_m,
+            "observation_velocity_noise_std_m_s": self.observation_velocity_noise_std_m_s,
+        }
 
     def perturb_observation(self, state: VehicleState, rng: random.Random) -> VehicleState:
         if not self.is_active():
@@ -176,6 +220,29 @@ class ScenarioDisturbanceConfig:
             linear_velocity_m_s=linear_velocity,
             angular_velocity_rad_s=state.angular_velocity_rad_s,
             time_s=state.time_s,
+        )
+
+    def build_aerodynamic_environment(
+        self,
+        vehicle: RigidBodyParameters,
+        *,
+        seed: int | None = None,
+    ) -> AerodynamicEnvironment:
+        drag_area_m2 = vehicle.parasitic_drag_area_m2
+        if self.parasitic_drag_area_m2 is not None:
+            drag_area_m2 = self.parasitic_drag_area_m2
+        induced_hover_loss_ratio = vehicle.induced_hover_loss_ratio
+        if self.induced_hover_loss_ratio is not None:
+            induced_hover_loss_ratio = self.induced_hover_loss_ratio
+        return AerodynamicEnvironment(
+            parasitic_drag_enabled=self.enabled and self.parasitic_drag_enabled,
+            induced_hover_enabled=self.enabled and self.induced_hover_enabled,
+            wind_velocity_m_s=self.wind_velocity_m_s,
+            wind_gust_std_m_s=self.wind_gust_std_m_s,
+            parasitic_drag_area_m2=drag_area_m2,
+            air_density_kg_m3=vehicle.air_density_kg_m3,
+            induced_hover_loss_ratio=induced_hover_loss_ratio,
+            seed=seed,
         )
 
 
@@ -260,7 +327,10 @@ class SimulationScenario:
         return random.Random(self.metadata.seed)
 
     def build_dynamics(self) -> RigidBody6DOFDynamics:
-        return RigidBody6DOFDynamics(parameters=self.vehicle)
+        return RigidBody6DOFDynamics(
+            parameters=self.vehicle,
+            aerodynamics=self.disturbances.build_aerodynamic_environment(self.vehicle, seed=self.seed),
+        )
 
     def build_controller(self) -> CascadedController:
         if self.controller.kind not in {"cascade", "pid_cascade"}:

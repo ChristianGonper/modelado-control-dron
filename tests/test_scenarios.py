@@ -90,3 +90,26 @@ def test_seeded_noise_is_reproducible_and_centralized() -> None:
 
     assert first == second
     assert first != third
+
+
+def test_scenario_disturbances_build_aerodynamic_environment() -> None:
+    scenario = replace(
+        build_minimal_scenario(),
+        disturbances=ScenarioDisturbanceConfig(
+            enabled=True,
+            parasitic_drag_enabled=True,
+            induced_hover_enabled=True,
+            wind_velocity_m_s=(1.0, -0.5, 0.0),
+            wind_gust_std_m_s=(0.1, 0.0, 0.0),
+            parasitic_drag_area_m2=0.12,
+            induced_hover_loss_ratio=0.2,
+        ),
+    )
+
+    environment = scenario.build_dynamics().aerodynamics
+
+    assert environment.parasitic_drag_enabled is True
+    assert environment.induced_hover_enabled is True
+    assert environment.wind_velocity_m_s == (1.0, -0.5, 0.0)
+    assert environment.parasitic_drag_area_m2 == pytest.approx(0.12)
+    assert environment.induced_hover_loss_ratio == pytest.approx(0.2)

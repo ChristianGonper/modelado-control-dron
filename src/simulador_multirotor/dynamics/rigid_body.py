@@ -7,12 +7,20 @@ from math import isfinite
 
 from ..core.attitude import normalize_quaternion, quaternion_multiply, rotate_vector_by_quaternion
 from ..core.contracts import VehicleCommand, VehicleState
+from .aerodynamics import AerodynamicEnvironment
 
 
 def _coerce_positive(value: object, field_name: str) -> float:
     number = float(value)
     if not isfinite(number) or number <= 0.0:
         raise ValueError(f"{field_name} must be a positive finite number")
+    return number
+
+
+def _coerce_float(value: object, field_name: str) -> float:
+    number = float(value)
+    if not isfinite(number):
+        raise ValueError(f"{field_name} must be a finite number")
     return number
 
 
@@ -27,6 +35,9 @@ class RigidBodyParameters:
     inertia_kg_m2: tuple[float, float, float] = (0.02, 0.02, 0.04)
     max_collective_thrust_newton: float = 20.0
     max_body_torque_nm: tuple[float, float, float] = (0.3, 0.3, 0.2)
+    parasitic_drag_area_m2: float = 0.0
+    air_density_kg_m3: float = 1.225
+    induced_hover_loss_ratio: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "mass_kg", _coerce_positive(self.mass_kg, "mass_kg"))
@@ -40,11 +51,23 @@ class RigidBodyParameters:
         )
         torque_limits = tuple(_coerce_positive(component, "max_body_torque_nm") for component in self.max_body_torque_nm)
         object.__setattr__(self, "max_body_torque_nm", torque_limits)
+        object.__setattr__(
+            self,
+            "parasitic_drag_area_m2",
+            max(0.0, _coerce_float(self.parasitic_drag_area_m2, "parasitic_drag_area_m2")),
+        )
+        object.__setattr__(self, "air_density_kg_m3", _coerce_positive(self.air_density_kg_m3, "air_density_kg_m3"))
+        object.__setattr__(
+            self,
+            "induced_hover_loss_ratio",
+            max(0.0, _coerce_float(self.induced_hover_loss_ratio, "induced_hover_loss_ratio")),
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class RigidBody6DOFDynamics:
     parameters: RigidBodyParameters = field(default_factory=RigidBodyParameters)
+    aerodynamics: AerodynamicEnvironment = field(default_factory=AerodynamicEnvironment)
 
     def step(self, state: VehicleState, command: VehicleCommand, dt_s: float) -> VehicleState:
         dt = float(dt_s)
@@ -57,11 +80,22 @@ class RigidBody6DOFDynamics:
             for component, limit in zip(command.body_torque_nm, self.parameters.max_body_torque_nm)
         )
 
-        thrust_world = rotate_vector_by_quaternion(state.orientation_wxyz, (0.0, 0.0, thrust))
+        wind_world = self.aerodynamics.sample_wind_velocity()
+        relative_air_velocity_world = tuple(
+            velocity - wind_component
+            for velocity, wind_component in zip(state.linear_velocity_m_s, wind_world)
+        )
+        drag_world = self.aerodynamics.compute_parasitic_drag_force_newton(relative_air_velocity_world)
+        induced_force_body = self.aerodynamics.compute_induced_force_body_newton(
+            thrust,
+            max_collective_thrust_newton=self.parameters.max_collective_thrust_newton,
+        )
+        effective_thrust = thrust + induced_force_body[2]
+        thrust_world = rotate_vector_by_quaternion(state.orientation_wxyz, (0.0, 0.0, effective_thrust))
         gravity_world = (0.0, 0.0, -self.parameters.gravity_m_s2 * self.parameters.mass_kg)
         acceleration = tuple(
-            (force + gravity) / self.parameters.mass_kg
-            for force, gravity in zip(thrust_world, gravity_world)
+            (force + gravity + drag) / self.parameters.mass_kg
+            for force, gravity, drag in zip(thrust_world, gravity_world, drag_world)
         )
 
         angular_acceleration = tuple(

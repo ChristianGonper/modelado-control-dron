@@ -46,9 +46,18 @@ class SimulationRunner:
                         metadata={
                             "scenario_name": scenario.metadata.name,
                             "seed": scenario.seed,
+                            "disturbances": scenario.disturbances.physical_flags(),
                         },
                     )
                 )
+                if scenario.disturbances.enabled:
+                    events.append(
+                        TelemetryEvent(
+                            kind="disturbance_model_configured",
+                            message="disturbance model configured from scenario",
+                            metadata=scenario.disturbances.physical_flags(),
+                        )
+                    )
             if reference.metadata.get("trajectory_exhausted"):
                 events.append(
                     TelemetryEvent(
@@ -81,6 +90,12 @@ class SimulationRunner:
                     metadata={
                         "step_dt_s": step_dt,
                         "trajectory_kind": trajectory.kind,
+                        "disturbances": {
+                            **scenario.disturbances.physical_flags(),
+                            "wind_sample_m_s": dynamics.aerodynamics.last_wind_velocity_m_s,
+                            "parasitic_drag_force_newton": dynamics.aerodynamics.last_parasitic_drag_force_newton,
+                            "induced_force_body_newton": dynamics.aerodynamics.last_induced_force_body_newton,
+                        },
                     },
                 )
             )
