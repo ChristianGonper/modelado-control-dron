@@ -5,24 +5,33 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .core.contracts import VehicleObservation
-from .scenarios import MinimalScenario
+from .scenarios import SimulationScenario
 from .telemetry import SimulationHistory, SimulationStep
 
 
 @dataclass(frozen=True, slots=True)
 class SimulationRunner:
-    def run(self, scenario: MinimalScenario) -> SimulationHistory:
+    def run(self, scenario: SimulationScenario) -> SimulationHistory:
         dynamics = scenario.build_dynamics()
         controller = scenario.build_controller()
+        rng = scenario.build_rng()
         state = scenario.initial_state
         time_s = state.time_s
         steps: list[SimulationStep] = []
 
         step_index = 0
-        while time_s < scenario.duration_s - 1e-12:
-            step_dt = min(scenario.dt_s, scenario.duration_s - time_s)
+        while time_s < scenario.time.duration_s - 1e-12:
+            step_dt = min(scenario.time.dt_s, scenario.time.duration_s - time_s)
             reference = scenario.reference_at(time_s)
-            observation = VehicleObservation(state=state, metadata={"step": step_index})
+            observed_state = scenario.disturbances.perturb_observation(state, rng)
+            observation = VehicleObservation(
+                state=observed_state,
+                metadata={
+                    "step": step_index,
+                    "seed": scenario.seed,
+                    "trajectory_kind": scenario.trajectory.kind,
+                },
+            )
             command = controller.update(observation, reference)
             state = dynamics.step(state, command, step_dt)
             time_s = state.time_s
@@ -38,7 +47,11 @@ class SimulationRunner:
             )
             step_index += 1
 
-        return SimulationHistory(initial_state=scenario.initial_state, steps=tuple(steps))
+        return SimulationHistory(
+            initial_state=scenario.initial_state,
+            steps=tuple(steps),
+            scenario_metadata=scenario.describe() if scenario.telemetry.record_scenario_metadata else {},
+        )
 
 
 def run_minimal_simulation() -> SimulationHistory:

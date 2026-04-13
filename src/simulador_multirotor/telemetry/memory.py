@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Mapping
 
 from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleObservation, VehicleState
 
@@ -21,6 +23,10 @@ class SimulationStep:
 class SimulationHistory:
     initial_state: VehicleState
     steps: tuple[SimulationStep, ...]
+    scenario_metadata: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "scenario_metadata", MappingProxyType(dict(self.scenario_metadata)))
 
     @property
     def final_state(self) -> VehicleState:
@@ -33,4 +39,3 @@ class SimulationHistory:
         if not self.steps:
             return self.initial_state.time_s
         return self.steps[-1].time_s
-
