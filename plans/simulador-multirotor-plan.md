@@ -1,6 +1,6 @@
 # Plan: Simulador modular para control inteligente de dron multirotor
 
-> Source PRD: [docs/PRD_simulador_multirotor.md](/C:/Users/chris/Documents/Universidad/TFG/docs/PRD_simulador_multirotor.md)
+> Source PRD: [docs/PRD_simulador_multirotor.md](../docs/PRD_simulador_multirotor.md)
 
 ## Architectural decisions
 

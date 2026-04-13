@@ -38,8 +38,8 @@ Tras esta sesión, el simulador cubre de extremo a extremo las fases 1 a 7 del p
 
 ### Documentación ya disponible
 
-- ADRs `ADR-001` a `ADR-008` en `docs/decisions/`.
-- [extension-points.md](/C:/Users/chris/Documents/Universidad/TFG/docs/extension-points.md) para enchufar nuevos controladores.
+- ADRs `ADR-001` a `ADR-008` en [docs/decisions](docs/decisions/).
+- [extension-points.md](extension-points.md) para enchufar nuevos controladores.
 
 ## Cómo Usarlo Hoy
 
