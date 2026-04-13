@@ -7,6 +7,7 @@ Base inicial del simulador modular para un dron multirotor. Esta primera fase de
 1. Sincroniza el entorno con `uv sync`.
 2. Lanza la ejecución mínima con `uv run multirotor-sim`.
 3. Ejecuta los tests con `uv run pytest`.
+4. Genera análisis estáticos con `uv run multirotor-sim --analysis-dir analysis_outputs`.
 
 ## Estructura
 
@@ -16,7 +17,7 @@ Base inicial del simulador modular para un dron multirotor. Esta primera fase de
 - `src/simulador_multirotor/trajectories`: espacio para trayectorias y referencias.
 - `src/simulador_multirotor/scenarios`: espacio para escenarios.
 - `src/simulador_multirotor/telemetry`: espacio para telemetría y exportación.
-- `src/simulador_multirotor/visualization`: espacio para análisis y visualización.
+- `src/simulador_multirotor/visualization`: análisis 2D/3D sobre telemetría persistida.
 - `src/simulador_multirotor/runner.py`: orquestación mínima extremo a extremo.
 
 ## Decisiones de arquitectura
@@ -24,3 +25,4 @@ Base inicial del simulador modular para un dron multirotor. Esta primera fase de
 - Los contratos compartidos viven en `core/contracts.py` para evitar dependencias circulares entre módulos.
 - Los modelos base usan `dataclasses` del estándar para mantener la fase 1 sin dependencias de validación externas.
 - El comando `multirotor-sim` es el punto de entrada único para la ejecución mínima.
+- La visualización lee telemetría exportada y genera PNG estáticos sin acoplarse al runner.

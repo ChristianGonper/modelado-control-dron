@@ -18,3 +18,4 @@ def test_package_imports_are_available() -> None:
     assert simulador_multirotor.dynamics.RigidBody6DOFDynamics is not None
     assert simulador_multirotor.scenarios.SimulationScenario is not None
     assert simulador_multirotor.metrics.TrackingMetrics is not None
+    assert simulador_multirotor.visualization.TelemetryArchive is not None
