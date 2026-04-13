@@ -1,7 +1,7 @@
 # Phased Orchestration Reference
 
 Primary expected input:
-- A phased task-breakdown document like `plans/task_breakdown_continuacion_producto_final.md`
+- A phased task-breakdown document like `plans/task_breakdown_.md`
 - Optional user constraints about model choice, git policy, documentation, and external research
 
 ## Intent
@@ -25,6 +25,7 @@ For each phase:
 
 1. Identify the exact phase and task slice to execute now from the task breakdown.
 2. Prepare the subagent brief:
+   - Path to the task-breakdown file
    - Goal of the phase
    - Specific tasks being executed in this round
    - Relevant files, modules, or ownership boundary
@@ -32,8 +33,9 @@ For each phase:
    - Required verification
    - Dependencies or checkpoint constraints
    - Documentation or git expectations
-   - Whether external research is allowed in this run
+   - Using Context7 for libraries documentation.
 3. Launch the subagent with the model named by the user.
+   - Explicitly tell the subagent to open the task-breakdown file first and use it as detailed execution context.
 4. Stay active and monitor progress.
 5. Review the completed work:
    - Check correctness and regressions
@@ -65,32 +67,17 @@ Typical triggers:
 - Physics or engineering assumptions
 - Non-obvious implementation tradeoffs
 
-## External Research Toggle
-
-The original orchestration flow treated external research as optional and user-controlled.
-
-Rule:
-- If the user explicitly says to use Context7 and/or Exa, allow subagents to use them for current docs and targeted implementation research.
-- Otherwise keep the run local to the repository and existing context.
-
-This prevents unnecessary browsing and keeps the orchestration prompt modular.
-
-## Findings Consolidated
-
-These findings were promoted into the skill:
-- Keep the orchestrator awake for the entire run.
-- Make the subagent model configurable from the orchestration prompt.
-- Improve git hygiene with a commit checkpoint per phase.
-- Treat documentation as a first-class part of the flow.
-- Reserve final merge to `main` for the end of the full sequence.
-- Treat the phased task-breakdown document as the operational source of truth.
-
 ## Recommended Handoff Template
 
 Use a brief like this for each subagent:
 
 ```md
 Implement Phase [N]: [title]
+
+Task breakdown path:
+- [path/to/task_breakdown.md]
+
+Read that file first. Use it as the detailed source of truth for the assigned tasks.
 
 Tasks in scope:
 - [task IDs or task titles]
@@ -117,11 +104,3 @@ Output:
 - Risks or unresolved issues
 - Exact verification performed
 ```
-
-## Boundaries
-
-This skill is for orchestration, not for replacing implementation discipline:
-- Do not skip review because a subagent reports success.
-- Do not start the next phase with unresolved defects in the current one.
-- Do not broaden scope mid-phase unless the user asks or the dependency graph forces it.
-- Do not ignore dependencies or checkpoints defined by the task-breakdown file.
