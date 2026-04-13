@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from simulador_multirotor.control import AttitudeLoopController, CascadedController, ControlTarget, PositionLoopController
+from simulador_multirotor.control import (
+    AttitudeLoopController,
+    CascadedController,
+    ControlTarget,
+    ControllerAdapter,
+    ControllerContract,
+    NullController,
+    PositionLoopController,
+)
 from simulador_multirotor.core.contracts import TrajectoryReference, VehicleObservation, VehicleState
 
 
@@ -30,7 +38,7 @@ def make_reference(x_m: float = 0.0, y_m: float = 0.0, z_m: float = 1.0) -> Traj
 def test_cascaded_controller_consumes_observation_and_reference() -> None:
     controller = CascadedController()
 
-    command = controller.update(make_observation(), make_reference())
+    command = controller.compute_action(make_observation(), make_reference())
 
     assert 0.0 <= command.collective_thrust_newton <= 20.0
     assert len(command.body_torque_nm) == 3
@@ -53,6 +61,22 @@ def test_outer_and_inner_loops_are_separable() -> None:
     assert all(abs(component) <= limit for component, limit in zip(command.body_torque_nm, (0.3, 0.3, 0.2)))
 
 
+def test_controller_contract_accepts_stub_and_adapter() -> None:
+    stub = NullController()
+
+    def _external_controller(observation: VehicleObservation, reference: TrajectoryReference):
+        return stub.compute_action(observation, reference)
+
+    adapter = ControllerAdapter(_external_controller, kind="external-stub", source="external")
+
+    assert isinstance(stub, ControllerContract)
+    assert isinstance(adapter, ControllerContract)
+    assert adapter.compute_action(make_observation(), make_reference()) == stub.compute_action(
+        make_observation(),
+        make_reference(),
+    )
+
+
 def test_controller_saturates_on_large_errors() -> None:
     controller = CascadedController()
 
@@ -60,4 +84,3 @@ def test_controller_saturates_on_large_errors() -> None:
 
     assert command.collective_thrust_newton == pytest.approx(20.0)
     assert all(abs(component) <= limit for component, limit in zip(command.body_torque_nm, (0.3, 0.3, 0.2)))
-

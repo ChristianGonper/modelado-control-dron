@@ -13,7 +13,7 @@ from math import isfinite
 from types import MappingProxyType
 from typing import ClassVar, Mapping, Sequence
 
-from ..control import CascadedController, AttitudeLoopController, PositionLoopController
+from ..control import AttitudeLoopController, CascadedController, ControllerContract, NullController, PositionLoopController
 from ..core.contracts import TrajectoryReference, VehicleState
 from ..dynamics import AerodynamicEnvironment, RigidBody6DOFDynamics, RigidBodyParameters
 from ..trajectories import TrajectoryContract, build_trajectory_from_config
@@ -332,7 +332,18 @@ class SimulationScenario:
             aerodynamics=self.disturbances.build_aerodynamic_environment(self.vehicle, seed=self.seed),
         )
 
-    def build_controller(self) -> CascadedController:
+    def build_controller(self) -> ControllerContract:
+        if self.controller.kind in {"stub", "null", "zero"}:
+            stub_parameters = dict(self.controller.parameters)
+            return NullController(
+                collective_thrust_newton=float(stub_parameters.get("collective_thrust_newton", 0.0)),
+                body_torque_nm=_coerce_vector(
+                    stub_parameters.get("body_torque_nm", (0.0, 0.0, 0.0)),
+                    length=3,
+                    field_name="body_torque_nm",
+                ),
+                parameters=stub_parameters,
+            )
         if self.controller.kind not in {"cascade", "pid_cascade"}:
             raise ValueError(f"unsupported controller kind: {self.controller.kind}")
 
@@ -347,7 +358,14 @@ class SimulationScenario:
         attitude_loop_parameters = dict(self.controller.parameters.get("attitude_loop", {}))
         position_loop = PositionLoopController(**{**position_defaults, **position_loop_parameters})
         attitude_loop = AttitudeLoopController(**{**attitude_defaults, **attitude_loop_parameters})
-        return CascadedController(position_loop=position_loop, attitude_loop=attitude_loop)
+        return CascadedController(
+            position_loop=position_loop,
+            attitude_loop=attitude_loop,
+            parameters={
+                "position_loop": asdict(position_loop),
+                "attitude_loop": asdict(attitude_loop),
+            },
+        )
 
     def reference_at(self, time_s: float) -> TrajectoryReference:
         return self.trajectory.build_reference(time_s, initial_state=self.initial_state)
@@ -378,6 +396,7 @@ class SimulationScenario:
             },
             "controller": {
                 "kind": self.controller.kind,
+                "source": "scenario",
                 "parameters": dict(self.controller.parameters),
             },
             "disturbances": asdict(self.disturbances),

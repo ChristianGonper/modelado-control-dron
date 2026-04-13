@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from math import atan2, cos, isfinite, sin
+from types import MappingProxyType
+from typing import Mapping
 
 from ..core.attitude import euler_from_quaternion
 from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleObservation, VehicleState
+from .contract import ControllerContract
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -29,6 +32,10 @@ def _coerce_vector(value: tuple[float, float, float] | list[float], field_name: 
     if len(value) != 3:
         raise ValueError(f"{field_name} must contain exactly 3 values")
     return (float(value[0]), float(value[1]), float(value[2]))
+
+
+def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(dict(value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,7 +160,7 @@ class AttitudeLoopController:
 
 
 @dataclass(frozen=True, slots=True)
-class CascadedController:
+class CascadedController(ControllerContract):
     position_loop: PositionLoopController = field(default_factory=PositionLoopController)
     attitude_loop: AttitudeLoopController = field(
         default_factory=lambda: AttitudeLoopController(
@@ -163,11 +170,36 @@ class CascadedController:
             max_body_torque_nm=(0.3, 0.3, 0.2),
         )
     )
+    kind: str = "cascade"
+    source: str = "pid"
+    parameters: Mapping[str, object] = field(default_factory=dict)
 
-    def update(
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "kind", str(self.kind).strip().lower() or "cascade")
+        object.__setattr__(self, "source", str(self.source).strip().lower() or "pid")
+        if not self.parameters:
+            object.__setattr__(
+                self,
+                "parameters",
+                {
+                    "position_loop": asdict(self.position_loop),
+                    "attitude_loop": asdict(self.attitude_loop),
+                },
+            )
+        object.__setattr__(self, "parameters", _freeze_mapping(self.parameters))
+
+    def compute_action(
         self,
         observation: VehicleObservation,
         reference: TrajectoryReference,
     ) -> VehicleCommand:
         target = self.position_loop.compute_target(observation, reference)
         return self.attitude_loop.compute_command(observation.state, target)
+
+    def update(
+        self,
+        observation: VehicleObservation,
+        reference: TrajectoryReference,
+    ) -> VehicleCommand:
+        """Backward-compatible alias used by the tracer bullet."""
+        return self.compute_action(observation, reference)

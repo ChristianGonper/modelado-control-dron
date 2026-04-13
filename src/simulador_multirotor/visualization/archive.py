@@ -101,6 +101,8 @@ class TelemetrySample:
 class TelemetryArchive:
     source_path: Path | None
     scenario_metadata: Mapping[str, object] = field(default_factory=dict)
+    vehicle_metadata: Mapping[str, object] = field(default_factory=dict)
+    controller_metadata: Mapping[str, object] = field(default_factory=dict)
     telemetry_metadata: Mapping[str, object] = field(default_factory=dict)
     initial_state: Mapping[str, object] = field(default_factory=dict)
     final_state: Mapping[str, object] = field(default_factory=dict)
@@ -109,6 +111,8 @@ class TelemetryArchive:
     def __post_init__(self) -> None:
         object.__setattr__(self, "source_path", None if self.source_path is None else Path(self.source_path))
         object.__setattr__(self, "scenario_metadata", _freeze_mapping(self.scenario_metadata))
+        object.__setattr__(self, "vehicle_metadata", _freeze_mapping(self.vehicle_metadata))
+        object.__setattr__(self, "controller_metadata", _freeze_mapping(self.controller_metadata))
         object.__setattr__(self, "telemetry_metadata", _freeze_mapping(self.telemetry_metadata))
         object.__setattr__(self, "initial_state", _freeze_mapping(self.initial_state))
         object.__setattr__(self, "final_state", _freeze_mapping(self.final_state))
@@ -212,9 +216,12 @@ def _sample_from_csv_row(row: Mapping[str, object]) -> TelemetrySample:
 
 def _load_json_archive(path: Path) -> TelemetryArchive:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    scenario_metadata = payload.get("scenario", {})
     return TelemetryArchive(
         source_path=path,
-        scenario_metadata=payload.get("scenario", {}),
+        scenario_metadata=scenario_metadata,
+        vehicle_metadata=payload.get("vehicle", scenario_metadata.get("vehicle", {})),
+        controller_metadata=payload.get("controller", scenario_metadata.get("controller", {})),
         telemetry_metadata=payload.get("telemetry", {}),
         initial_state=payload.get("initial_state", {}),
         final_state=payload.get("final_state", {}),
@@ -225,10 +232,13 @@ def _load_json_archive(path: Path) -> TelemetryArchive:
 def _load_npz_archive(path: Path) -> TelemetryArchive:
     with np.load(path, allow_pickle=False) as archive:
         metadata = json.loads(archive["metadata_json"].item())
+        scenario_metadata = metadata.get("scenario", {})
         sample_count = int(archive["sample_count"].item())
         return TelemetryArchive(
             source_path=path,
-            scenario_metadata=metadata.get("scenario", {}),
+            scenario_metadata=scenario_metadata,
+            vehicle_metadata=metadata.get("vehicle", scenario_metadata.get("vehicle", {})),
+            controller_metadata=metadata.get("controller", scenario_metadata.get("controller", {})),
             telemetry_metadata=metadata.get("telemetry", {}),
             initial_state=metadata.get("initial_state", {}),
             final_state=metadata.get("final_state", {}),
@@ -245,9 +255,12 @@ def _load_csv_archive(path: Path) -> TelemetryArchive:
         else:
             handle.seek(0)
         rows = list(csv.DictReader(line for line in handle if not line.startswith("#")))
+    scenario_metadata = metadata.get("scenario", {})
     return TelemetryArchive(
         source_path=path,
-        scenario_metadata=metadata.get("scenario", {}),
+        scenario_metadata=scenario_metadata,
+        vehicle_metadata=metadata.get("vehicle", scenario_metadata.get("vehicle", {})),
+        controller_metadata=metadata.get("controller", scenario_metadata.get("controller", {})),
         telemetry_metadata=metadata.get("telemetry", {}),
         initial_state=metadata.get("initial_state", {}),
         final_state=metadata.get("final_state", {}),

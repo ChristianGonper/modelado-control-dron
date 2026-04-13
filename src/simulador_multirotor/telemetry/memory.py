@@ -214,10 +214,14 @@ class SimulationHistory:
     initial_state: VehicleState
     steps: tuple[SimulationStep, ...]
     scenario_metadata: Mapping[str, object] = field(default_factory=dict)
+    vehicle_metadata: Mapping[str, object] = field(default_factory=dict)
+    controller_metadata: Mapping[str, object] = field(default_factory=dict)
     telemetry_metadata: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "scenario_metadata", MappingProxyType(dict(self.scenario_metadata)))
+        object.__setattr__(self, "vehicle_metadata", MappingProxyType(dict(self.vehicle_metadata)))
+        object.__setattr__(self, "controller_metadata", MappingProxyType(dict(self.controller_metadata)))
         object.__setattr__(self, "telemetry_metadata", MappingProxyType(dict(self.telemetry_metadata)))
 
     @property

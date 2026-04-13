@@ -17,6 +17,8 @@ def test_persisted_telemetry_can_be_visualized_in_2d_and_3d(tmp_path) -> None:
     bundle = render_analysis_outputs(archive, tmp_path)
 
     assert archive.sample_count == len(history.steps)
+    assert archive.vehicle_metadata["mass_kg"] == history.vehicle_metadata["mass_kg"]
+    assert archive.controller_metadata["kind"] == history.controller_metadata["kind"]
     assert bundle.trajectory_2d_path.exists()
     assert bundle.tracking_errors_path.exists()
     assert bundle.trajectory_3d_path.exists()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .control import ControllerContract
 from .core.contracts import VehicleObservation
 from .scenarios import SimulationScenario
 from .telemetry import SimulationHistory, SimulationStep, TelemetryEvent, TrackingError
@@ -11,11 +12,12 @@ from .telemetry import SimulationHistory, SimulationStep, TelemetryEvent, Tracki
 
 @dataclass(frozen=True, slots=True)
 class SimulationRunner:
-    def run(self, scenario: SimulationScenario) -> SimulationHistory:
+    def run(self, scenario: SimulationScenario, controller: ControllerContract | None = None) -> SimulationHistory:
         dynamics = scenario.build_dynamics()
-        controller = scenario.build_controller()
+        controller = scenario.build_controller() if controller is None else controller
         rng = scenario.build_rng()
         trajectory = scenario.build_trajectory()
+        scenario_description = scenario.describe()
         state = scenario.initial_state
         time_s = state.time_s
         steps: list[SimulationStep] = []
@@ -31,9 +33,10 @@ class SimulationRunner:
                     "step": step_index,
                     "seed": scenario.seed,
                     "trajectory_kind": trajectory.kind,
+                    "controller_kind": controller.kind,
                 },
             )
-            command = controller.update(observation, reference)
+            command = controller.compute_action(observation, reference)
             state = dynamics.step(state, command, step_dt)
             time_s = state.time_s
             error = TrackingError.from_state_and_reference(state=observation.state, reference=reference)
@@ -46,6 +49,8 @@ class SimulationRunner:
                         metadata={
                             "scenario_name": scenario.metadata.name,
                             "seed": scenario.seed,
+                            "controller_kind": controller.kind,
+                            "controller_source": controller.source,
                             "disturbances": scenario.disturbances.physical_flags(),
                         },
                     )
@@ -66,6 +71,7 @@ class SimulationRunner:
                         metadata={
                             "trajectory_kind": trajectory.kind,
                             "trajectory_source": trajectory.source,
+                            "controller_kind": controller.kind,
                         },
                     )
                 )
@@ -90,6 +96,8 @@ class SimulationRunner:
                     metadata={
                         "step_dt_s": step_dt,
                         "trajectory_kind": trajectory.kind,
+                        "controller_kind": controller.kind,
+                        "controller_source": controller.source,
                         "disturbances": {
                             **scenario.disturbances.physical_flags(),
                             "wind_sample_m_s": dynamics.aerodynamics.last_wind_velocity_m_s,
@@ -104,7 +112,13 @@ class SimulationRunner:
         return SimulationHistory(
             initial_state=scenario.initial_state,
             steps=tuple(steps),
-            scenario_metadata=scenario.describe() if scenario.telemetry.record_scenario_metadata else {},
+            scenario_metadata=scenario_description if scenario.telemetry.record_scenario_metadata else {},
+            vehicle_metadata=scenario_description.get("vehicle", {}),
+            controller_metadata={
+                "kind": controller.kind,
+                "source": controller.source,
+                "parameters": dict(controller.parameters),
+            },
             telemetry_metadata={
                 "record_scenario_metadata": scenario.telemetry.record_scenario_metadata,
                 "detail_level": scenario.telemetry.detail_level,

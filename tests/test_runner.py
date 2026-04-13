@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from simulador_multirotor.control import NullController
 from simulador_multirotor.runner import SimulationRunner
 from simulador_multirotor.scenarios import ScenarioTrajectoryConfig, build_minimal_scenario
 
@@ -45,3 +46,14 @@ def test_runner_executes_scenarios_with_native_trajectories(kind: str, parameter
     assert history.final_time_s == pytest.approx(scenario.duration_s, abs=1e-9)
     assert history.steps[0].reference.metadata["trajectory_kind"] == kind
     assert history.steps[0].events[0].kind == "simulation_start"
+
+
+def test_runner_accepts_controller_override_stub() -> None:
+    scenario = build_minimal_scenario()
+    controller = NullController()
+
+    history = SimulationRunner().run(scenario, controller=controller)
+
+    assert history.controller_metadata["kind"] == "stub"
+    assert history.controller_metadata["source"] == "internal"
+    assert history.steps[0].command.collective_thrust_newton == pytest.approx(0.0)

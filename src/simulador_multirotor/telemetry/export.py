@@ -172,12 +172,16 @@ def _metadata_payload(
     sample_count: int,
 ) -> dict[str, object]:
     scenario_metadata = dict(history.scenario_metadata)
+    vehicle_metadata = dict(history.vehicle_metadata)
+    controller_metadata = dict(history.controller_metadata)
     telemetry_metadata = dict(history.telemetry_metadata)
     telemetry_metadata["detail_level"] = detail_level
     telemetry_metadata["sample_dt_s"] = sample_dt_s
     telemetry_metadata["sample_count"] = sample_count
     return {
         "scenario": scenario_metadata,
+        "vehicle": vehicle_metadata,
+        "controller": controller_metadata,
         "telemetry": telemetry_metadata,
         "initial_state": {
             "position_m": history.initial_state.position_m,
