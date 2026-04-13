@@ -26,3 +26,10 @@ Base inicial del simulador modular para un dron multirotor. Esta primera fase de
 - Los modelos base usan `dataclasses` del estándar para mantener la fase 1 sin dependencias de validación externas.
 - El comando `multirotor-sim` es el punto de entrada único para la ejecución mínima.
 - La visualización lee telemetría exportada y genera PNG estáticos sin acoplarse al runner.
+
+## Documentación
+
+- [Estado actual del simulador](/C:/Users/chris/Documents/Universidad/TFG/docs/estado_actual_simulador.md)
+- [Backlog técnico recomendado](/C:/Users/chris/Documents/Universidad/TFG/docs/backlog_tecnico.md)
+- [Puntos de extensión](/C:/Users/chris/Documents/Universidad/TFG/docs/extension-points.md)
+- `docs/decisions/`: ADRs de arquitectura y decisiones de diseño por fase
