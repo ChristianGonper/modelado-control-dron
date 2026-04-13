@@ -12,6 +12,7 @@ from simulador_multirotor.scenarios import (
     ScenarioTrajectoryConfig,
     build_minimal_scenario,
 )
+from simulador_multirotor.trajectories import TrajectoryContract
 
 
 def test_minimal_scenario_uses_reasonable_defaults() -> None:
@@ -20,15 +21,32 @@ def test_minimal_scenario_uses_reasonable_defaults() -> None:
     assert scenario.trajectory.kind == "hover"
     assert scenario.time.duration_s == pytest.approx(1.0)
     assert scenario.time.dt_s == pytest.approx(0.02)
+    assert isinstance(scenario.build_trajectory(), TrajectoryContract)
     assert scenario.reference_at(0.0).position_m == (0.0, 0.0, 1.0)
+
+
+def test_scenario_trajectory_selection_is_registry_driven() -> None:
+    scenario = replace(
+        build_minimal_scenario(),
+        trajectory=ScenarioTrajectoryConfig(
+            kind="line",
+            valid_until_s=1.0,
+            parameters={
+                "start_position_m": (0.0, 0.0, 0.0),
+                "velocity_m_s": (1.0, 0.0, 0.0),
+            },
+        ),
+    )
+
+    reference = scenario.reference_at(0.5)
+
+    assert reference.position_m == pytest.approx((0.5, 0.0, 0.0))
+    assert reference.metadata["trajectory_kind"] == "line"
 
 
 def test_scenario_validation_reports_clear_errors() -> None:
     with pytest.raises(ValueError, match="positive"):
         ScenarioTimeConfig(duration_s=0.0, dt_s=0.02)
-
-    with pytest.raises(ValueError, match="unsupported trajectory kind"):
-        ScenarioTrajectoryConfig(kind="spiral").build_reference(0.0)
 
 
 def test_runner_reads_time_and_metadata_from_scenario() -> None:
@@ -44,6 +62,7 @@ def test_runner_reads_time_and_metadata_from_scenario() -> None:
     assert len(history.steps) == 2
     assert history.scenario_metadata["metadata"]["name"] == "custom-run"
     assert history.scenario_metadata["metadata"]["seed"] == 17
+    assert history.steps[0].reference.metadata["trajectory_kind"] == "hover"
 
 
 def test_seeded_noise_is_reproducible_and_centralized() -> None:

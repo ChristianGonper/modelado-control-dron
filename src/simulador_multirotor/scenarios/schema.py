@@ -16,6 +16,7 @@ from typing import Mapping, Sequence
 from ..control import CascadedController, AttitudeLoopController, PositionLoopController
 from ..core.contracts import TrajectoryReference, VehicleState
 from ..dynamics import RigidBody6DOFDynamics, RigidBodyParameters
+from ..trajectories import TrajectoryContract, build_trajectory_from_config
 
 
 def _coerce_float(value: object, field_name: str) -> float:
@@ -123,23 +124,11 @@ class ScenarioTrajectoryConfig:
         object.__setattr__(self, "source", source)
         object.__setattr__(self, "parameters", _freeze_mapping(self.parameters))
 
-    def build_reference(self, time_s: float) -> TrajectoryReference:
-        if self.kind not in {"hover", "static"}:
-            raise ValueError(f"unsupported trajectory kind: {self.kind}")
-        return TrajectoryReference(
-            time_s=time_s,
-            position_m=self.target_position_m,
-            velocity_m_s=self.target_velocity_m_s,
-            yaw_rad=self.target_yaw_rad,
-            valid_from_s=0.0,
-            valid_until_s=self.valid_until_s,
-            acceleration_m_s2=self.target_acceleration_m_s2,
-            metadata={
-                "trajectory_kind": self.kind,
-                "trajectory_source": self.source,
-                "trajectory_parameters": dict(self.parameters),
-            },
-        )
+    def build_trajectory(self, *, initial_state: VehicleState | None = None) -> TrajectoryContract:
+        return build_trajectory_from_config(self, initial_state=initial_state)
+
+    def build_reference(self, time_s: float, *, initial_state: VehicleState | None = None) -> TrajectoryReference:
+        return self.build_trajectory(initial_state=initial_state).reference_at(time_s)
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,7 +275,10 @@ class SimulationScenario:
         return CascadedController(position_loop=position_loop, attitude_loop=attitude_loop)
 
     def reference_at(self, time_s: float) -> TrajectoryReference:
-        return self.trajectory.build_reference(time_s)
+        return self.trajectory.build_reference(time_s, initial_state=self.initial_state)
+
+    def build_trajectory(self) -> TrajectoryContract:
+        return self.trajectory.build_trajectory(initial_state=self.initial_state)
 
     def describe(self) -> dict[str, object]:
         return {
@@ -316,4 +308,3 @@ class SimulationScenario:
             "disturbances": asdict(self.disturbances),
             "telemetry": asdict(self.telemetry),
         }
-

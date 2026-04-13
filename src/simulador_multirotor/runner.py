@@ -15,6 +15,7 @@ class SimulationRunner:
         dynamics = scenario.build_dynamics()
         controller = scenario.build_controller()
         rng = scenario.build_rng()
+        trajectory = scenario.build_trajectory()
         state = scenario.initial_state
         time_s = state.time_s
         steps: list[SimulationStep] = []
@@ -22,14 +23,14 @@ class SimulationRunner:
         step_index = 0
         while time_s < scenario.time.duration_s - 1e-12:
             step_dt = min(scenario.time.dt_s, scenario.time.duration_s - time_s)
-            reference = scenario.reference_at(time_s)
+            reference = trajectory.reference_at(time_s)
             observed_state = scenario.disturbances.perturb_observation(state, rng)
             observation = VehicleObservation(
                 state=observed_state,
                 metadata={
                     "step": step_index,
                     "seed": scenario.seed,
-                    "trajectory_kind": scenario.trajectory.kind,
+                    "trajectory_kind": trajectory.kind,
                 },
             )
             command = controller.update(observation, reference)
