@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from .core.contracts import VehicleObservation
 from .scenarios import SimulationScenario
-from .telemetry import SimulationHistory, SimulationStep
+from .telemetry import SimulationHistory, SimulationStep, TelemetryEvent, TrackingError
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +36,38 @@ class SimulationRunner:
             command = controller.update(observation, reference)
             state = dynamics.step(state, command, step_dt)
             time_s = state.time_s
+            error = TrackingError.from_state_and_reference(state=observation.state, reference=reference)
+            events: list[TelemetryEvent] = []
+            if step_index == 0:
+                events.append(
+                    TelemetryEvent(
+                        kind="simulation_start",
+                        message="simulation started",
+                        metadata={
+                            "scenario_name": scenario.metadata.name,
+                            "seed": scenario.seed,
+                        },
+                    )
+                )
+            if reference.metadata.get("trajectory_exhausted"):
+                events.append(
+                    TelemetryEvent(
+                        kind="trajectory_exhausted",
+                        message="trajectory horizon reached",
+                        metadata={
+                            "trajectory_kind": trajectory.kind,
+                            "trajectory_source": trajectory.source,
+                        },
+                    )
+                )
+            if time_s >= scenario.time.duration_s - 1e-12:
+                events.append(
+                    TelemetryEvent(
+                        kind="simulation_complete",
+                        message="simulation completed",
+                        metadata={"final_time_s": time_s},
+                    )
+                )
             steps.append(
                 SimulationStep(
                     index=step_index,
@@ -43,7 +75,13 @@ class SimulationRunner:
                     state=state,
                     observation=observation,
                     reference=reference,
+                    error=error,
                     command=command,
+                    events=tuple(events),
+                    metadata={
+                        "step_dt_s": step_dt,
+                        "trajectory_kind": trajectory.kind,
+                    },
                 )
             )
             step_index += 1
@@ -52,6 +90,11 @@ class SimulationRunner:
             initial_state=scenario.initial_state,
             steps=tuple(steps),
             scenario_metadata=scenario.describe() if scenario.telemetry.record_scenario_metadata else {},
+            telemetry_metadata={
+                "record_scenario_metadata": scenario.telemetry.record_scenario_metadata,
+                "detail_level": scenario.telemetry.detail_level,
+                "sample_dt_s": scenario.telemetry.sample_dt_s,
+            },
         )
 
 

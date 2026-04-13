@@ -11,7 +11,7 @@ import random
 from dataclasses import asdict, dataclass, field
 from math import isfinite
 from types import MappingProxyType
-from typing import Mapping, Sequence
+from typing import ClassVar, Mapping, Sequence
 
 from ..control import CascadedController, AttitudeLoopController, PositionLoopController
 from ..core.contracts import TrajectoryReference, VehicleState
@@ -197,11 +197,16 @@ class ScenarioTelemetryConfig:
     record_scenario_metadata: bool = True
     detail_level: str = "standard"
     sample_dt_s: float | None = None
+    _allowed_detail_levels: ClassVar[tuple[str, ...]] = ("compact", "standard", "full")
 
     def __post_init__(self) -> None:
         detail_level = str(self.detail_level).strip().lower()
         if not detail_level:
             raise ValueError("detail_level must be a non-empty string")
+        if detail_level not in self._allowed_detail_levels:
+            raise ValueError(
+                "detail_level must be one of: compact, standard, full"
+            )
         object.__setattr__(self, "detail_level", detail_level)
         sample_dt_s = _coerce_optional_float(self.sample_dt_s, "sample_dt_s")
         if sample_dt_s is not None and sample_dt_s <= 0.0:

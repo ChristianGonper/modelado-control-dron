@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Simulador modular para control inteligente de un dron multirotor."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["numpy>=2.0"]
 
 [project.scripts]
 multirotor-sim = "simulador_multirotor.app:main"
@@ -21,4 +21,3 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-

@@ -8,6 +8,7 @@ from simulador_multirotor.runner import SimulationRunner
 from simulador_multirotor.scenarios import (
     ScenarioDisturbanceConfig,
     ScenarioMetadata,
+    ScenarioTelemetryConfig,
     ScenarioTimeConfig,
     ScenarioTrajectoryConfig,
     build_minimal_scenario,
@@ -47,6 +48,11 @@ def test_scenario_trajectory_selection_is_registry_driven() -> None:
 def test_scenario_validation_reports_clear_errors() -> None:
     with pytest.raises(ValueError, match="positive"):
         ScenarioTimeConfig(duration_s=0.0, dt_s=0.02)
+
+
+def test_telemetry_detail_level_is_validated() -> None:
+    with pytest.raises(ValueError, match="detail_level"):
+        ScenarioTelemetryConfig(detail_level="verbose")
 
 
 def test_runner_reads_time_and_metadata_from_scenario() -> None:

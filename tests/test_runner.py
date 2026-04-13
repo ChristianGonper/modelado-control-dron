@@ -44,3 +44,4 @@ def test_runner_executes_scenarios_with_native_trajectories(kind: str, parameter
     assert len(history.steps) > 0
     assert history.final_time_s == pytest.approx(scenario.duration_s, abs=1e-9)
     assert history.steps[0].reference.metadata["trajectory_kind"] == kind
+    assert history.steps[0].events[0].kind == "simulation_start"
