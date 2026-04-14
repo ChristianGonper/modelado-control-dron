@@ -61,7 +61,7 @@ class SimulationRunner:
                     "control_time_s": current_command_time_s,
                 },
             )
-            error = TrackingError.from_state_and_reference(state=state, reference=reference)
+            error = TrackingError.from_tracking_state_and_reference(tracking_state=state, reference=reference)
             applied_command = dynamics.last_applied_command or current_command
             events: list[TelemetryEvent] = []
             if step_index == 0:
@@ -126,16 +126,21 @@ class SimulationRunner:
                             "control_dt_s": control_dt_s,
                             "telemetry_dt_s": telemetry_dt_s,
                             "command_time_s": current_command_time_s,
+                            "tracking_state_source": "true_state",
                             "trajectory_kind": trajectory.kind,
                             "controller_kind": controller.kind,
                             "controller_source": controller.source,
-                            "disturbances": {
-                                **scenario.disturbances.physical_flags(),
-                                "wind_sample_m_s": dynamics.aerodynamics.last_wind_velocity_m_s,
-                                "parasitic_drag_force_newton": dynamics.aerodynamics.last_parasitic_drag_force_newton,
-                                "induced_force_body_newton": dynamics.aerodynamics.last_induced_force_body_newton,
-                            },
+                        "disturbances": {
+                            **scenario.disturbances.physical_flags(),
+                            "wind_model": "ornstein_uhlenbeck",
+                            "wind_sample_dt_s": step_dt,
+                            "wind_base_velocity_m_s": dynamics.aerodynamics.last_wind_base_velocity_m_s,
+                            "wind_gust_velocity_m_s": dynamics.aerodynamics.last_wind_gust_velocity_m_s,
+                            "wind_sample_m_s": dynamics.aerodynamics.last_wind_velocity_m_s,
+                            "parasitic_drag_force_newton": dynamics.aerodynamics.last_parasitic_drag_force_newton,
+                            "induced_force_body_newton": dynamics.aerodynamics.last_induced_force_body_newton,
                         },
+                    },
                     )
                 )
                 pending_events.clear()
@@ -164,6 +169,7 @@ class SimulationRunner:
                 "physics_dt_s": physics_dt_s,
                 "control_dt_s": control_dt_s,
                 "telemetry_dt_s": telemetry_dt_s,
+                "tracking_state_source": "true_state",
             },
         )
 

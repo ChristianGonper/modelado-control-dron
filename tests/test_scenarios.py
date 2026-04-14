@@ -113,6 +113,7 @@ def test_scenario_disturbances_build_aerodynamic_environment() -> None:
             induced_hover_enabled=True,
             wind_velocity_m_s=(1.0, -0.5, 0.0),
             wind_gust_std_m_s=(0.1, 0.0, 0.0),
+            wind_gust_time_constant_s=0.3,
             parasitic_drag_area_m2=0.12,
             induced_hover_loss_ratio=0.2,
         ),
@@ -123,5 +124,11 @@ def test_scenario_disturbances_build_aerodynamic_environment() -> None:
     assert environment.parasitic_drag_enabled is True
     assert environment.induced_hover_enabled is True
     assert environment.wind_velocity_m_s == (1.0, -0.5, 0.0)
+    assert environment.wind_gust_time_constant_s == pytest.approx(0.3)
     assert environment.parasitic_drag_area_m2 == pytest.approx(0.12)
     assert environment.induced_hover_loss_ratio == pytest.approx(0.2)
+
+
+def test_disturbance_wind_correlation_time_is_validated() -> None:
+    with pytest.raises(ValueError, match="positive"):
+        ScenarioDisturbanceConfig(wind_gust_time_constant_s=0.0)

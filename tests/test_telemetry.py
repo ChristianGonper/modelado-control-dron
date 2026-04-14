@@ -26,6 +26,7 @@ def test_telemetry_schema_records_errors_and_events() -> None:
     assert first_step.events[0].kind == "simulation_start"
     assert last_step.events[-1].kind == "simulation_complete"
     assert history.telemetry_metadata["detail_level"] == "standard"
+    assert history.telemetry_metadata["tracking_state_source"] == "true_state"
     assert history.vehicle_metadata["mass_kg"] == history.scenario_metadata["vehicle"]["mass_kg"]
     assert history.controller_metadata["kind"] == "cascade"
     assert history.scenario_metadata["telemetry"]["detail_level"] == "standard"
@@ -48,8 +49,12 @@ def test_telemetry_preserves_true_and_observed_state_separately() -> None:
 
     assert step.observation.true_state.time_s == step.observation.observed_state.time_s
     assert step.observation.true_state != step.observation.observed_state
-    assert payload["observation"]["true_state"]["time_s"] == step.observation.true_state.time_s
-    assert payload["observation"]["observed_state"]["time_s"] == step.observation.observed_state.time_s
+    assert step.true_state == step.state
+    assert step.observed_state == step.observation.observed_state
+    assert payload["true_state"]["time_s"] == step.true_state.time_s
+    assert payload["observed_state"]["time_s"] == step.observed_state.time_s
+    assert payload["tracking_state"]["time_s"] == step.tracking_state.time_s
+    assert payload["tracking_state_source"] == "true_state"
 
 
 def test_export_formats_preserve_metadata_and_detail_level_control(tmp_path) -> None:
@@ -74,10 +79,12 @@ def test_export_formats_preserve_metadata_and_detail_level_control(tmp_path) -> 
     json_path = export_history_to_json(full_history, tmp_path / "telemetry.json")
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["telemetry"]["detail_level"] == "full"
+    assert payload["telemetry"]["tracking_state_source"] == "true_state"
     assert payload["scenario"]["metadata"]["name"] == full_scenario.metadata.name
     assert payload["vehicle"]["mass_kg"] == full_scenario.vehicle.mass_kg
     assert payload["controller"]["kind"] == "cascade"
-    assert "observation_position_x_m" in payload["samples"][0]
+    assert "true_state_position_x_m" in payload["samples"][0]
+    assert "observed_state_position_x_m" in payload["samples"][0]
     assert len(payload["samples"]) == len(full_history.steps)
 
     npz_path = export_history_to_numpy(full_history, tmp_path / "telemetry.npz")
@@ -85,5 +92,6 @@ def test_export_formats_preserve_metadata_and_detail_level_control(tmp_path) -> 
         metadata = json.loads(archive["metadata_json"].item())
         assert int(archive["sample_count"]) == len(full_history.steps)
         assert metadata["telemetry"]["detail_level"] == "full"
+        assert metadata["telemetry"]["tracking_state_source"] == "true_state"
         assert metadata["vehicle"]["mass_kg"] == full_scenario.vehicle.mass_kg
         assert archive["state_position_m"].shape[1] == 3

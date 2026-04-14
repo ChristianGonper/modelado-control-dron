@@ -116,3 +116,16 @@ def test_rotorized_dynamics_applies_finite_motor_lag() -> None:
     assert dynamics.last_applied_command.collective_thrust_newton < 9.81
     assert next_state.linear_velocity_m_s[2] < 0.0
 
+
+def test_vehicle_parameter_scaling_rejects_incoherent_thrust_limits() -> None:
+    vehicle = build_minimal_scenario().vehicle
+
+    with pytest.raises(ValueError, match="vehicle weight"):
+        RigidBodyParameters(
+            mass_kg=vehicle.mass_kg,
+            gravity_m_s2=vehicle.gravity_m_s2,
+            inertia_kg_m2=vehicle.inertia_kg_m2,
+            max_collective_thrust_newton=1.0,
+            rotors=vehicle.rotors,
+        )
+

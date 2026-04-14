@@ -247,12 +247,21 @@ class RigidBodyStateDerivative:
 
 @dataclass(frozen=True, slots=True)
 class RigidBodyParameters:
+    """Vehicle inertial and aerodynamic scaling parameters.
+
+    Aerodynamic effects are currently modeled as aggregated body-level forces
+    and torques. Rotor-level thrust and reaction torque still come from the
+    explicit rotor geometry, but parasitic drag and induced hover losses are
+    not distributed per rotor.
+    """
+
     mass_kg: float = 1.0
     gravity_m_s2: float = 9.81
     inertia_kg_m2: tuple[float, float, float] = (0.02, 0.02, 0.04)
     max_collective_thrust_newton: float = 20.0
     max_body_torque_nm: tuple[float, float, float] = (0.3, 0.3, 0.2)
     motor_time_constant_s: float = 0.03
+    aerodynamic_force_model: str = "aggregated_body"
     parasitic_drag_area_m2: float = 0.0
     air_density_kg_m3: float = 1.225
     induced_hover_loss_ratio: float = 0.0
@@ -275,6 +284,10 @@ class RigidBodyParameters:
             "motor_time_constant_s",
             _coerce_positive(self.motor_time_constant_s, "motor_time_constant_s"),
         )
+        aerodynamic_force_model = str(self.aerodynamic_force_model).strip().lower()
+        if aerodynamic_force_model != "aggregated_body":
+            raise ValueError("aerodynamic_force_model must be aggregated_body")
+        object.__setattr__(self, "aerodynamic_force_model", aerodynamic_force_model)
         object.__setattr__(
             self,
             "parasitic_drag_area_m2",
@@ -286,6 +299,8 @@ class RigidBodyParameters:
             "induced_hover_loss_ratio",
             max(0.0, _coerce_float(self.induced_hover_loss_ratio, "induced_hover_loss_ratio")),
         )
+        if self.induced_hover_loss_ratio > 1.0:
+            raise ValueError("induced_hover_loss_ratio must be less than or equal to 1.0")
         rotors = tuple(self.rotors)
         seen_names: set[str] = set()
         for rotor in rotors:
@@ -295,6 +310,23 @@ class RigidBodyParameters:
                 raise ValueError("rotors must not contain duplicate names")
             seen_names.add(rotor.name)
         object.__setattr__(self, "rotors", rotors)
+        if rotors:
+            hover_thrust_newton = self.mass_kg * self.gravity_m_s2
+            if self.max_collective_thrust_newton < hover_thrust_newton:
+                raise ValueError("max_collective_thrust_newton must cover the vehicle weight when rotors are configured")
+            max_available_thrust_newton = 0.0
+            all_rotors_bounded = True
+            for rotor in rotors:
+                if rotor.max_angular_speed_rad_s is None:
+                    all_rotors_bounded = False
+                    break
+                max_available_thrust_newton += (
+                    rotor.thrust_coefficient_newton_per_rad_s2
+                    * rotor.max_angular_speed_rad_s
+                    * rotor.max_angular_speed_rad_s
+                )
+            if all_rotors_bounded and max_available_thrust_newton < self.max_collective_thrust_newton:
+                raise ValueError("sum of rotor maximum thrusts must cover max_collective_thrust_newton")
 
     @property
     def rotor_count(self) -> int:
@@ -482,7 +514,7 @@ class RigidBody6DOFDynamics:
             raise ValueError("dt_s must be a positive finite number")
 
         effective_command = self._resolve_effective_command(command, dt)
-        wind_world = self.aerodynamics.sample_wind_velocity()
+        wind_world = self.aerodynamics.sample_wind_velocity(dt)
         k1 = self.evaluate_derivative(state, effective_command, wind_world=wind_world)
         k2_state = self._predict_state(state, k1, 0.5 * dt)
         k2 = self.evaluate_derivative(k2_state, effective_command, wind_world=wind_world)

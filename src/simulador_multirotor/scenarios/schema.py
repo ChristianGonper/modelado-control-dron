@@ -179,6 +179,7 @@ class ScenarioDisturbanceConfig:
     induced_hover_enabled: bool = False
     wind_velocity_m_s: tuple[float, float, float] = (0.0, 0.0, 0.0)
     wind_gust_std_m_s: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    wind_gust_time_constant_s: float = 0.25
     parasitic_drag_area_m2: float | None = None
     induced_hover_loss_ratio: float | None = None
     observation_position_noise_std_m: float = 0.0
@@ -190,6 +191,9 @@ class ScenarioDisturbanceConfig:
         object.__setattr__(self, "induced_hover_enabled", bool(self.induced_hover_enabled))
         object.__setattr__(self, "wind_velocity_m_s", _coerce_vector(self.wind_velocity_m_s, length=3, field_name="wind_velocity_m_s"))
         object.__setattr__(self, "wind_gust_std_m_s", _coerce_vector(self.wind_gust_std_m_s, length=3, field_name="wind_gust_std_m_s"))
+        object.__setattr__(self, "wind_gust_time_constant_s", _coerce_float(self.wind_gust_time_constant_s, "wind_gust_time_constant_s"))
+        if self.wind_gust_time_constant_s <= 0.0:
+            raise ValueError("wind_gust_time_constant_s must be positive")
         if self.parasitic_drag_area_m2 is not None:
             object.__setattr__(
                 self,
@@ -238,6 +242,7 @@ class ScenarioDisturbanceConfig:
             "induced_hover_enabled": self.induced_hover_enabled,
             "wind_velocity_m_s": self.wind_velocity_m_s,
             "wind_gust_std_m_s": self.wind_gust_std_m_s,
+            "wind_gust_time_constant_s": self.wind_gust_time_constant_s,
             "parasitic_drag_area_m2": self.parasitic_drag_area_m2,
             "induced_hover_loss_ratio": self.induced_hover_loss_ratio,
             "observation_position_noise_std_m": self.observation_position_noise_std_m,
@@ -280,6 +285,7 @@ class ScenarioDisturbanceConfig:
             induced_hover_enabled=self.enabled and self.induced_hover_enabled,
             wind_velocity_m_s=self.wind_velocity_m_s,
             wind_gust_std_m_s=self.wind_gust_std_m_s,
+            wind_gust_time_constant_s=self.wind_gust_time_constant_s,
             parasitic_drag_area_m2=drag_area_m2,
             air_density_kg_m3=vehicle.air_density_kg_m3,
             induced_hover_loss_ratio=induced_hover_loss_ratio,

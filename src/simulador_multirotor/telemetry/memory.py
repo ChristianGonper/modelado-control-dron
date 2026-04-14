@@ -130,22 +130,32 @@ class TrackingError:
         object.__setattr__(self, "yaw_rad", _coerce_float(self.yaw_rad, "yaw_rad"))
 
     @classmethod
+    def from_tracking_state_and_reference(
+        cls,
+        *,
+        tracking_state: VehicleState,
+        reference: TrajectoryReference,
+    ) -> "TrackingError":
+        _, _, current_yaw = euler_from_quaternion(tracking_state.orientation_wxyz)
+        position_error = tuple(
+            reference_value - state_value
+            for reference_value, state_value in zip(reference.position_m, tracking_state.position_m)
+        )
+        velocity_error = tuple(
+            reference_value - state_value
+            for reference_value, state_value in zip(reference.velocity_m_s, tracking_state.linear_velocity_m_s)
+        )
+        yaw_error = _wrap_angle(reference.yaw_rad - current_yaw)
+        return cls(position_m=position_error, velocity_m_s=velocity_error, yaw_rad=yaw_error)
+
+    @classmethod
     def from_state_and_reference(
         cls,
         *,
         state: VehicleState,
         reference: TrajectoryReference,
     ) -> "TrackingError":
-        _, _, current_yaw = euler_from_quaternion(state.orientation_wxyz)
-        position_error = tuple(
-            reference_value - state_value for reference_value, state_value in zip(reference.position_m, state.position_m)
-        )
-        velocity_error = tuple(
-            reference_value - state_value
-            for reference_value, state_value in zip(reference.velocity_m_s, state.linear_velocity_m_s)
-        )
-        yaw_error = _wrap_angle(reference.yaw_rad - current_yaw)
-        return cls(position_m=position_error, velocity_m_s=velocity_error, yaw_rad=yaw_error)
+        return cls.from_tracking_state_and_reference(tracking_state=state, reference=reference)
 
     @property
     def position_norm_m(self) -> float:
@@ -208,6 +218,18 @@ class SimulationStep:
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
 
     @property
+    def true_state(self) -> VehicleState:
+        return self.state
+
+    @property
+    def observed_state(self) -> VehicleState:
+        return self.observation.observed_state
+
+    @property
+    def tracking_state(self) -> VehicleState:
+        return self.state
+
+    @property
     def position_error_norm_m(self) -> float:
         return self.error.position_norm_m
 
@@ -219,13 +241,16 @@ class SimulationStep:
         record = {
             "index": self.index,
             "time_s": self.time_s,
+            "true_state": _serialize_state(self.true_state),
+            "observed_state": _serialize_state(self.observed_state),
+            "tracking_state": _serialize_state(self.tracking_state),
             "state": _serialize_state(self.state),
-            "true_state": _serialize_state(self.state),
             "state_time_s": self.state.time_s,
             "reference": _serialize_reference(self.reference),
             "error": self.error.to_dict(),
             "command": _serialize_command(self.command),
             "command_time_s": self.metadata.get("command_time_s", self.time_s),
+            "tracking_state_source": "true_state",
             "events": [event.to_dict() for event in self.events],
             "metadata": _serialize_mapping(self.metadata),
         }
@@ -233,10 +258,8 @@ class SimulationStep:
             record.pop("metadata")
             record.pop("events")
             record["observation"] = None
-            record["observed_state"] = _serialize_state(self.observation.observed_state)
         else:
             record["observation"] = _serialize_observation(self.observation)
-            record["observed_state"] = _serialize_state(self.observation.observed_state)
             record["observation_time_s"] = self.observation.observed_state.time_s
             if detail_level != "full":
                 record["observation"] = {

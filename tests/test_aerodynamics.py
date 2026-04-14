@@ -20,6 +20,17 @@ def make_level_state(*, velocity_x_m_s: float = 0.0) -> VehicleState:
     )
 
 
+def _gust_energy(environment: AerodynamicEnvironment, *, dt_s: float, samples: int, burn_in: int = 0) -> float:
+    energies: list[float] = []
+    for index in range(samples):
+        wind = environment.sample_wind_velocity(dt_s)
+        if index < burn_in:
+            continue
+        gust = tuple(component - base for component, base in zip(wind, environment.wind_velocity_m_s))
+        energies.append(sum(component * component for component in gust))
+    return sum(energies) / len(energies)
+
+
 def test_parasitic_drag_opposes_motion_and_is_switchable() -> None:
     command = VehicleCommand(collective_thrust_newton=0.0, body_torque_nm=(0.0, 0.0, 0.0))
     state = make_level_state(velocity_x_m_s=5.0)
@@ -88,3 +99,29 @@ def test_perturbed_runner_is_reproducible_and_respects_basic_bounds() -> None:
         assert all(isfinite(component) for component in step.state.angular_velocity_rad_s)
         quaternion_norm = sum(component * component for component in step.state.orientation_wxyz)
         assert quaternion_norm == pytest.approx(1.0, abs=1e-9)
+        assert step.metadata["disturbances"]["wind_model"] == "ornstein_uhlenbeck"
+        assert step.metadata["disturbances"]["wind_sample_dt_s"] == pytest.approx(step.metadata["step_dt_s"])
+        assert "wind_base_velocity_m_s" in step.metadata["disturbances"]
+
+
+def test_wind_process_is_seed_reproducible_and_dt_invariant() -> None:
+    base_kwargs = dict(
+        wind_velocity_m_s=(0.2, -0.1, 0.05),
+        wind_gust_std_m_s=(0.15, 0.15, 0.15),
+        wind_gust_time_constant_s=0.2,
+        seed=123,
+    )
+    dt_small = 0.01
+    dt_large = 0.04
+
+    first = AerodynamicEnvironment(**base_kwargs)
+    second = AerodynamicEnvironment(**base_kwargs)
+    assert [first.sample_wind_velocity(dt_small) for _ in range(32)] == [second.sample_wind_velocity(dt_small) for _ in range(32)]
+
+    energy_small = _gust_energy(AerodynamicEnvironment(**base_kwargs), dt_s=dt_small, samples=4000, burn_in=500)
+    energy_large = _gust_energy(AerodynamicEnvironment(**base_kwargs), dt_s=dt_large, samples=1000, burn_in=125)
+    expected_energy = 3.0 * (0.15**2)
+
+    assert energy_small == pytest.approx(expected_energy, rel=0.2)
+    assert energy_large == pytest.approx(expected_energy, rel=0.2)
+    assert energy_small == pytest.approx(energy_large, rel=0.15)
