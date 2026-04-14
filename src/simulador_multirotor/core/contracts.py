@@ -331,7 +331,7 @@ class TrajectoryReference:
             object.__setattr__(self, "valid_until_s", valid_until)
         if self.time_s < self.valid_from_s:
             raise ValueError("time_s must be greater than or equal to valid_from_s")
-        if self.valid_until_s is not None and self.time_s > self.valid_until_s:
+        if self.valid_until_s is not None and self.time_s > self.valid_until_s + 1e-9:
             raise ValueError("time_s must be less than or equal to valid_until_s")
         if self.acceleration_m_s2 is not None:
             object.__setattr__(
@@ -347,6 +347,6 @@ class TrajectoryReference:
         time_value = _coerce_float(time_s, "time_s")
         if time_value < self.valid_from_s:
             return False
-        if self.valid_until_s is not None and time_value > self.valid_until_s:
+        if self.valid_until_s is not None and time_value > self.valid_until_s + 1e-9:
             return False
         return True

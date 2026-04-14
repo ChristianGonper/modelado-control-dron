@@ -8,7 +8,7 @@ telemetry, and experiment metadata into a single extensible contract.
 from __future__ import annotations
 
 import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from math import isfinite
 from types import MappingProxyType
 from typing import ClassVar, Mapping, Sequence
@@ -45,6 +45,13 @@ def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
     return MappingProxyType(dict(value))
 
 
+def _is_multiple_of(value: float, base: float, *, tolerance: float = 1e-9) -> bool:
+    if base <= 0.0:
+        return False
+    ratio = value / base
+    return abs(ratio - round(ratio)) <= tolerance
+
+
 def _state_to_summary(state: VehicleState) -> dict[str, object]:
     return {
         "position_m": state.position_m,
@@ -53,6 +60,18 @@ def _state_to_summary(state: VehicleState) -> dict[str, object]:
         "angular_velocity_rad_s": state.angular_velocity_rad_s,
         "time_s": state.time_s,
     }
+
+
+def _serialize_value(value: object) -> object:
+    if is_dataclass(value):
+        return {field.name: _serialize_value(getattr(value, field.name)) for field in fields(value)}
+    if isinstance(value, Mapping):
+        return {key: _serialize_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_serialize_value(item) for item in value)
+    if isinstance(value, list):
+        return [_serialize_value(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,21 +93,43 @@ class ScenarioMetadata:
 @dataclass(frozen=True, slots=True)
 class ScenarioTimeConfig:
     duration_s: float
-    dt_s: float
+    dt_s: float | None = None
+    physics_dt_s: float | None = None
+    control_dt_s: float | None = None
     telemetry_dt_s: float | None = None
 
     def __post_init__(self) -> None:
         duration_s = _coerce_float(self.duration_s, "duration_s")
-        dt_s = _coerce_float(self.dt_s, "dt_s")
+        physics_dt_s = self.physics_dt_s if self.physics_dt_s is not None else self.dt_s
+        if physics_dt_s is None:
+            raise ValueError("physics_dt_s or dt_s must be provided")
+        physics_dt_s = _coerce_float(physics_dt_s, "physics_dt_s")
         if duration_s <= 0.0:
             raise ValueError("duration_s must be positive")
-        if dt_s <= 0.0:
-            raise ValueError("dt_s must be positive")
+        if physics_dt_s <= 0.0:
+            raise ValueError("physics_dt_s must be positive")
+        control_dt_s = _coerce_optional_float(self.control_dt_s, "control_dt_s")
+        if control_dt_s is None:
+            control_dt_s = physics_dt_s
         telemetry_dt_s = _coerce_optional_float(self.telemetry_dt_s, "telemetry_dt_s")
+        if telemetry_dt_s is None:
+            telemetry_dt_s = control_dt_s
+        if control_dt_s <= 0.0:
+            raise ValueError("control_dt_s must be positive")
         if telemetry_dt_s is not None and telemetry_dt_s <= 0.0:
             raise ValueError("telemetry_dt_s must be positive")
+        if control_dt_s < physics_dt_s - 1e-12:
+            raise ValueError("control_dt_s must be greater than or equal to physics_dt_s")
+        if telemetry_dt_s < physics_dt_s - 1e-12:
+            raise ValueError("telemetry_dt_s must be greater than or equal to physics_dt_s")
+        if not _is_multiple_of(control_dt_s, physics_dt_s):
+            raise ValueError("control_dt_s must be an integer multiple of physics_dt_s")
+        if not _is_multiple_of(telemetry_dt_s, physics_dt_s):
+            raise ValueError("telemetry_dt_s must be an integer multiple of physics_dt_s")
         object.__setattr__(self, "duration_s", duration_s)
-        object.__setattr__(self, "dt_s", dt_s)
+        object.__setattr__(self, "dt_s", physics_dt_s)
+        object.__setattr__(self, "physics_dt_s", physics_dt_s)
+        object.__setattr__(self, "control_dt_s", control_dt_s)
         object.__setattr__(self, "telemetry_dt_s", telemetry_dt_s)
 
 
@@ -320,6 +361,18 @@ class SimulationScenario:
         return self.time.dt_s
 
     @property
+    def physics_dt_s(self) -> float:
+        return self.time.physics_dt_s if self.time.physics_dt_s is not None else self.time.dt_s
+
+    @property
+    def control_dt_s(self) -> float:
+        return self.time.control_dt_s if self.time.control_dt_s is not None else self.physics_dt_s
+
+    @property
+    def telemetry_dt_s(self) -> float:
+        return self.time.telemetry_dt_s if self.time.telemetry_dt_s is not None else self.control_dt_s
+
+    @property
     def seed(self) -> int | None:
         return self.metadata.seed
 
@@ -347,7 +400,12 @@ class SimulationScenario:
         if self.controller.kind not in {"cascade", "pid_cascade"}:
             raise ValueError(f"unsupported controller kind: {self.controller.kind}")
 
-        position_defaults = {"kp_position": (2.0, 2.0, 4.0), "kd_velocity": (1.2, 1.2, 2.5)}
+        position_defaults = {
+            "mass_kg": self.vehicle.mass_kg,
+            "gravity_m_s2": self.vehicle.gravity_m_s2,
+            "kp_position": (2.0, 2.0, 4.0),
+            "kd_velocity": (1.2, 1.2, 2.5),
+        }
         attitude_defaults = {
             "mass_kg": self.vehicle.mass_kg,
             "gravity_m_s2": self.vehicle.gravity_m_s2,
@@ -381,7 +439,7 @@ class SimulationScenario:
                 "seed": self.metadata.seed,
                 "tags": self.metadata.tags,
             },
-            "vehicle": asdict(self.vehicle),
+            "vehicle": _serialize_value(self.vehicle),
             "initial_state": _state_to_summary(self.initial_state),
             "time": asdict(self.time),
             "trajectory": {

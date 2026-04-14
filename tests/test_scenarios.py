@@ -50,6 +50,18 @@ def test_scenario_validation_reports_clear_errors() -> None:
         ScenarioTimeConfig(duration_s=0.0, dt_s=0.02)
 
 
+def test_scenario_time_config_supports_separate_rates() -> None:
+    time = ScenarioTimeConfig(duration_s=0.12, physics_dt_s=0.02, control_dt_s=0.04, telemetry_dt_s=0.06)
+
+    assert time.dt_s == pytest.approx(0.02)
+    assert time.physics_dt_s == pytest.approx(0.02)
+    assert time.control_dt_s == pytest.approx(0.04)
+    assert time.telemetry_dt_s == pytest.approx(0.06)
+
+    with pytest.raises(ValueError, match="integer multiple"):
+        ScenarioTimeConfig(duration_s=0.12, physics_dt_s=0.02, control_dt_s=0.03)
+
+
 def test_telemetry_detail_level_is_validated() -> None:
     with pytest.raises(ValueError, match="detail_level"):
         ScenarioTelemetryConfig(detail_level="verbose")

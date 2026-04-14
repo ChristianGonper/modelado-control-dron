@@ -9,7 +9,7 @@ from typing import Iterable, Mapping
 
 import numpy as np
 
-from .memory import SimulationHistory, SimulationStep
+from .memory import SimulationHistory, SimulationStep, _serialize_command
 
 
 _ALLOWED_DETAIL_LEVELS = {"compact", "standard", "full"}
@@ -91,6 +91,9 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
     row: dict[str, object] = {
         "step_index": step.index,
         "time_s": step.time_s,
+        "state_time_s": step.state.time_s,
+        "observation_time_s": step.observation.observed_state.time_s,
+        "command_time_s": step.metadata.get("command_time_s", step.time_s),
         "reference_time_s": step.reference.time_s,
         "reference_yaw_rad": step.reference.yaw_rad,
         "reference_valid_from_s": step.reference.valid_from_s,
@@ -100,6 +103,8 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
         "command_body_torque_x_nm": step.command.body_torque_nm[0],
         "command_body_torque_y_nm": step.command.body_torque_nm[1],
         "command_body_torque_z_nm": step.command.body_torque_nm[2],
+        "command_rotor_count": len(step.command.rotor_commands),
+        "command_rotor_commands_json": _json_dump(_serialize_command(step.command)["rotor_commands"]),
         "event_kinds_json": _json_dump([event.kind for event in step.events]),
     }
     row.update(_state_columns("state", {
@@ -129,7 +134,6 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
             "linear_velocity_m_s": observation_state.linear_velocity_m_s,
             "angular_velocity_rad_s": observation_state.angular_velocity_rad_s,
         }))
-        row["observation_time_s"] = observation_state.time_s
         row["observation_metadata_json"] = _json_dump(dict(step.observation.metadata))
         row["reference_metadata_json"] = _json_dump(dict(step.reference.metadata))
         row["step_metadata_json"] = _json_dump(dict(step.metadata))
@@ -172,10 +176,7 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
                 "metadata": dict(step.reference.metadata),
             },
             "error": step.error.to_dict(),
-            "command": {
-                "collective_thrust_newton": step.command.collective_thrust_newton,
-                "body_torque_nm": step.command.body_torque_nm,
-            },
+            "command": _serialize_command(step.command),
             "events": [event.to_dict() for event in step.events],
         })
     return row
@@ -302,6 +303,9 @@ def export_history_to_numpy(
     if rows:
         arrays["step_index"] = np.asarray([row["step_index"] for row in rows], dtype=np.int64)
         arrays["time_s"] = np.asarray([row["time_s"] for row in rows], dtype=np.float64)
+        arrays["state_time_s"] = np.asarray([row["state_time_s"] for row in rows], dtype=np.float64)
+        arrays["observation_time_s"] = np.asarray([row["observation_time_s"] for row in rows], dtype=np.float64)
+        arrays["command_time_s"] = np.asarray([row["command_time_s"] for row in rows], dtype=np.float64)
         arrays["state_position_m"] = np.asarray(
             [[row["state_position_x_m"], row["state_position_y_m"], row["state_position_z_m"]] for row in rows],
             dtype=np.float64,
@@ -356,6 +360,8 @@ def export_history_to_numpy(
             ],
             dtype=np.float64,
         )
+        arrays["command_rotor_count"] = np.asarray([row["command_rotor_count"] for row in rows], dtype=np.int64)
+        arrays["command_rotor_commands_json"] = _string_array(row["command_rotor_commands_json"] for row in rows)
         arrays["event_kinds_json"] = _string_array(row["event_kinds_json"] for row in rows)
         if resolved_detail != "compact":
             arrays["reference_metadata_json"] = _string_array(row["reference_metadata_json"] for row in rows)

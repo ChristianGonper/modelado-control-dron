@@ -55,7 +55,7 @@ def test_telemetry_preserves_true_and_observed_state_separately() -> None:
 def test_export_formats_preserve_metadata_and_detail_level_control(tmp_path) -> None:
     compact_scenario = replace(
         build_minimal_scenario(),
-        telemetry=ScenarioTelemetryConfig(detail_level="compact", sample_dt_s=0.04),
+        telemetry=ScenarioTelemetryConfig(detail_level="compact", sample_dt_s=0.08),
     )
     full_scenario = replace(
         build_minimal_scenario(),

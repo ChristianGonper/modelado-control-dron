@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from math import atan2, cos, isfinite, sin
+from math import isfinite, sqrt
 from types import MappingProxyType
 from typing import Mapping
 
-from ..core.attitude import euler_from_quaternion
+from ..core.attitude import (
+    normalize_quaternion,
+    quaternion_error_vector,
+    quaternion_from_thrust_direction_and_yaw,
+    quaternion_shortest_error,
+)
 from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleIntent, VehicleObservation, VehicleState
 from .contract import ControllerContract
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
-
-
-def _wrap_angle(angle_rad: float) -> float:
-    wrapped = (angle_rad + 3.141592653589793) % (2.0 * 3.141592653589793) - 3.141592653589793
-    return wrapped
 
 
 def _coerce_gain(value: object, field_name: str) -> float:
@@ -42,6 +42,9 @@ def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
 class ControlTarget:
     desired_acceleration_m_s2: tuple[float, float, float]
     desired_yaw_rad: float
+    desired_collective_thrust_newton: float
+    desired_attitude_wxyz: tuple[float, float, float, float]
+    desired_body_rate_rad_s: tuple[float, float, float]
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -50,14 +53,33 @@ class ControlTarget:
             _coerce_vector(self.desired_acceleration_m_s2, "desired_acceleration_m_s2"),
         )
         object.__setattr__(self, "desired_yaw_rad", _coerce_gain(self.desired_yaw_rad, "desired_yaw_rad"))
+        object.__setattr__(
+            self,
+            "desired_collective_thrust_newton",
+            _coerce_gain(self.desired_collective_thrust_newton, "desired_collective_thrust_newton"),
+        )
+        object.__setattr__(
+            self,
+            "desired_attitude_wxyz",
+            normalize_quaternion(self.desired_attitude_wxyz),
+        )
+        object.__setattr__(
+            self,
+            "desired_body_rate_rad_s",
+            _coerce_vector(self.desired_body_rate_rad_s, "desired_body_rate_rad_s"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class PositionLoopController:
+    mass_kg: float = 1.0
+    gravity_m_s2: float = 9.81
     kp_position: tuple[float, float, float] = (2.0, 2.0, 4.0)
     kd_velocity: tuple[float, float, float] = (1.2, 1.2, 2.5)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "mass_kg", _coerce_gain(self.mass_kg, "mass_kg"))
+        object.__setattr__(self, "gravity_m_s2", _coerce_gain(self.gravity_m_s2, "gravity_m_s2"))
         object.__setattr__(self, "kp_position", _coerce_vector(self.kp_position, "kp_position"))
         object.__setattr__(self, "kd_velocity", _coerce_vector(self.kd_velocity, "kd_velocity"))
 
@@ -84,9 +106,25 @@ class PositionLoopController:
                 acceleration + feedforward
                 for acceleration, feedforward in zip(desired_acceleration, reference.acceleration_m_s2)
             )
+        desired_force_world = tuple(
+            self.mass_kg * component for component in (
+                desired_acceleration[0],
+                desired_acceleration[1],
+                desired_acceleration[2] + self.gravity_m_s2,
+            )
+        )
+        desired_thrust = sqrt(sum(component * component for component in desired_force_world))
+        if desired_thrust <= 1e-9:
+            desired_force_world = (0.0, 0.0, self.mass_kg * self.gravity_m_s2)
+            desired_thrust = self.mass_kg * self.gravity_m_s2
+        desired_body_z_world = tuple(component / desired_thrust for component in desired_force_world)
+        desired_attitude = quaternion_from_thrust_direction_and_yaw(desired_body_z_world, reference.yaw_rad)
         return ControlTarget(
             desired_acceleration_m_s2=desired_acceleration,
             desired_yaw_rad=reference.yaw_rad,
+            desired_collective_thrust_newton=desired_thrust,
+            desired_attitude_wxyz=desired_attitude,
+            desired_body_rate_rad_s=(0.0, 0.0, 0.0),
         )
 
 
@@ -114,41 +152,29 @@ class AttitudeLoopController:
         object.__setattr__(self, "max_tilt_rad", _coerce_gain(self.max_tilt_rad, "max_tilt_rad"))
 
     def compute_command(self, state: VehicleState, target: ControlTarget) -> VehicleCommand:
-        desired_accel_world = target.desired_acceleration_m_s2
-        desired_yaw = target.desired_yaw_rad
-        current_roll, current_pitch, current_yaw = euler_from_quaternion(state.orientation_wxyz)
-
-        cos_yaw = cos(desired_yaw)
-        sin_yaw = sin(desired_yaw)
-        ax_body = cos_yaw * desired_accel_world[0] + sin_yaw * desired_accel_world[1]
-        ay_body = -sin_yaw * desired_accel_world[0] + cos_yaw * desired_accel_world[1]
-
-        vertical = max(0.2, self.gravity_m_s2 + desired_accel_world[2])
-        desired_pitch = _clamp(atan2(-ax_body, vertical), -self.max_tilt_rad, self.max_tilt_rad)
-        desired_roll = _clamp(atan2(ay_body, vertical), -self.max_tilt_rad, self.max_tilt_rad)
-        roll_error = _wrap_angle(desired_roll - current_roll)
-        pitch_error = _wrap_angle(desired_pitch - current_pitch)
-        yaw_error = _wrap_angle(desired_yaw - current_yaw)
+        attitude_error = quaternion_error_vector(quaternion_shortest_error(target.desired_attitude_wxyz, state.orientation_wxyz))
         angular_velocity = state.angular_velocity_rad_s
+        body_rate_error = tuple(
+            desired_rate - current_rate
+            for desired_rate, current_rate in zip(target.desired_body_rate_rad_s, angular_velocity)
+        )
         torque_command = tuple(
             _clamp(
-                kp * error - kd * rate,
+                kp * error + kd * rate,
                 -limit,
                 limit,
             )
             for kp, error, kd, rate, limit in zip(
                 self.kp_attitude,
-                (roll_error, pitch_error, yaw_error),
+                attitude_error,
                 self.kd_body_rate,
-                angular_velocity,
+                body_rate_error,
                 self.max_body_torque_nm,
             )
         )
 
-        desired_thrust = self.mass_kg * vertical
-        thrust_denominator = max(0.25, cos(desired_roll) * cos(desired_pitch))
         collective_thrust = _clamp(
-            desired_thrust / thrust_denominator,
+            target.desired_collective_thrust_newton,
             0.0,
             self.max_collective_thrust_newton,
         )

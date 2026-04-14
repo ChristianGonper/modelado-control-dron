@@ -54,6 +54,140 @@ def quaternion_derivative(
     return tuple(0.5 * component for component in q_dot)
 
 
+def _vector_norm(vector: Sequence[float]) -> float:
+    return sqrt(sum(float(component) * float(component) for component in vector))
+
+
+def _vector_normalize(vector: Sequence[float]) -> tuple[float, float, float]:
+    if len(vector) != 3:
+        raise ValueError("vector must contain exactly 3 values")
+    norm = _vector_norm(vector)
+    if norm == 0.0:
+        raise ValueError("vector norm must be non-zero")
+    return (float(vector[0]) / norm, float(vector[1]) / norm, float(vector[2]) / norm)
+
+
+def _vector_cross(left: Sequence[float], right: Sequence[float]) -> tuple[float, float, float]:
+    if len(left) != 3 or len(right) != 3:
+        raise ValueError("both vectors must contain exactly 3 values")
+    lx, ly, lz = (float(component) for component in left)
+    rx, ry, rz = (float(component) for component in right)
+    return (
+        ly * rz - lz * ry,
+        lz * rx - lx * rz,
+        lx * ry - ly * rx,
+    )
+
+
+def quaternion_shortest_error(
+    desired_quaternion: Sequence[float],
+    current_quaternion: Sequence[float],
+) -> tuple[float, float, float, float]:
+    """Return the shortest-arc quaternion error from current to desired."""
+
+    error = normalize_quaternion(
+        quaternion_multiply(desired_quaternion, quaternion_conjugate(current_quaternion))
+    )
+    if error[0] < 0.0:
+        return tuple(-component for component in error)
+    return error
+
+
+def quaternion_error_vector(quaternion: Sequence[float]) -> tuple[float, float, float]:
+    """Map a unit quaternion error to a rotation vector in body axes."""
+
+    if len(quaternion) != 4:
+        raise ValueError("quaternion must contain exactly 4 values")
+    w, x, y, z = normalize_quaternion(quaternion)
+    if w < 0.0:
+        w, x, y, z = -w, -x, -y, -z
+    vector_norm = sqrt(x * x + y * y + z * z)
+    if vector_norm == 0.0:
+        return (0.0, 0.0, 0.0)
+    angle = 2.0 * atan2(vector_norm, w)
+    scale = angle / vector_norm
+    return (x * scale, y * scale, z * scale)
+
+
+def quaternion_from_rotation_matrix(matrix: Sequence[Sequence[float]]) -> tuple[float, float, float, float]:
+    """Convert a 3x3 rotation matrix to a unit quaternion."""
+
+    if len(matrix) != 3 or any(len(row) != 3 for row in matrix):
+        raise ValueError("matrix must be 3x3")
+    m00 = float(matrix[0][0])
+    m01 = float(matrix[0][1])
+    m02 = float(matrix[0][2])
+    m10 = float(matrix[1][0])
+    m11 = float(matrix[1][1])
+    m12 = float(matrix[1][2])
+    m20 = float(matrix[2][0])
+    m21 = float(matrix[2][1])
+    m22 = float(matrix[2][2])
+    trace = m00 + m11 + m22
+    if trace > 0.0:
+        scale = sqrt(trace + 1.0) * 2.0
+        return normalize_quaternion(
+            (
+                0.25 * scale,
+                (m21 - m12) / scale,
+                (m02 - m20) / scale,
+                (m10 - m01) / scale,
+            )
+        )
+    if m00 >= m11 and m00 >= m22:
+        scale = sqrt(1.0 + m00 - m11 - m22) * 2.0
+        return normalize_quaternion(
+            (
+                (m21 - m12) / scale,
+                0.25 * scale,
+                (m01 + m10) / scale,
+                (m02 + m20) / scale,
+            )
+        )
+    if m11 > m22:
+        scale = sqrt(1.0 + m11 - m00 - m22) * 2.0
+        return normalize_quaternion(
+            (
+                (m02 - m20) / scale,
+                (m01 + m10) / scale,
+                0.25 * scale,
+                (m12 + m21) / scale,
+            )
+        )
+    scale = sqrt(1.0 + m22 - m00 - m11) * 2.0
+    return normalize_quaternion(
+        (
+            (m10 - m01) / scale,
+            (m02 + m20) / scale,
+            (m12 + m21) / scale,
+            0.25 * scale,
+        )
+    )
+
+
+def quaternion_from_thrust_direction_and_yaw(
+    thrust_direction_world: Sequence[float],
+    yaw_rad: float,
+) -> tuple[float, float, float, float]:
+    """Build a desired attitude from a thrust axis and a world yaw heading."""
+
+    z_axis = _vector_normalize(thrust_direction_world)
+    yaw_heading = (cos(yaw_rad), sin(yaw_rad), 0.0)
+    y_axis = _vector_cross(z_axis, yaw_heading)
+    if _vector_norm(y_axis) < 1e-9:
+        yaw_heading = (0.0, 1.0, 0.0)
+        y_axis = _vector_cross(z_axis, yaw_heading)
+    y_axis = _vector_normalize(y_axis)
+    x_axis = _vector_cross(y_axis, z_axis)
+    return quaternion_from_rotation_matrix(
+        (
+            (x_axis[0], y_axis[0], z_axis[0]),
+            (x_axis[1], y_axis[1], z_axis[1]),
+            (x_axis[2], y_axis[2], z_axis[2]),
+        )
+    )
+
+
 def quaternion_increment_from_angular_velocity(
     angular_velocity_rad_s: Sequence[float],
     dt_s: float,
