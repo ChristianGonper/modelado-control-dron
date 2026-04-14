@@ -122,7 +122,7 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
     })
 
     if detail_level != "compact":
-        observation_state = step.observation.state
+        observation_state = step.observation.observed_state
         row.update(_state_columns("observation", {
             "position_m": observation_state.position_m,
             "orientation_wxyz": observation_state.orientation_wxyz,
@@ -143,6 +143,23 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
                 "linear_velocity_m_s": step.state.linear_velocity_m_s,
                 "angular_velocity_rad_s": step.state.angular_velocity_rad_s,
                 "time_s": step.state.time_s,
+            },
+            "observation": {
+                "true_state": {
+                    "position_m": step.observation.true_state.position_m,
+                    "orientation_wxyz": step.observation.true_state.orientation_wxyz,
+                    "linear_velocity_m_s": step.observation.true_state.linear_velocity_m_s,
+                    "angular_velocity_rad_s": step.observation.true_state.angular_velocity_rad_s,
+                    "time_s": step.observation.true_state.time_s,
+                },
+                "observed_state": {
+                    "position_m": step.observation.observed_state.position_m,
+                    "orientation_wxyz": step.observation.observed_state.orientation_wxyz,
+                    "linear_velocity_m_s": step.observation.observed_state.linear_velocity_m_s,
+                    "angular_velocity_rad_s": step.observation.observed_state.angular_velocity_rad_s,
+                    "time_s": step.observation.observed_state.time_s,
+                },
+                "metadata": dict(step.observation.metadata),
             },
             "reference": {
                 "time_s": step.reference.time_s,

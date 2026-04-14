@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import asin, atan2, copysign, cos, pi, sin, sqrt
+from math import asin, atan2, copysign, cos, isfinite, pi, sin, sqrt
 from typing import Sequence
 
 
@@ -34,6 +34,50 @@ def quaternion_multiply(
         lw * rx + lx * rw + ly * rz - lz * ry,
         lw * ry - lx * rz + ly * rw + lz * rx,
         lw * rz + lx * ry - ly * rx + lz * rw,
+    )
+
+
+def quaternion_derivative(
+    quaternion: Sequence[float],
+    angular_velocity_rad_s: Sequence[float],
+) -> tuple[float, float, float, float]:
+    if len(angular_velocity_rad_s) != 3:
+        raise ValueError("angular_velocity_rad_s must contain exactly 3 values")
+    w, x, y, z = normalize_quaternion(quaternion)
+    omega_quaternion = (
+        0.0,
+        float(angular_velocity_rad_s[0]),
+        float(angular_velocity_rad_s[1]),
+        float(angular_velocity_rad_s[2]),
+    )
+    q_dot = quaternion_multiply((w, x, y, z), omega_quaternion)
+    return tuple(0.5 * component for component in q_dot)
+
+
+def quaternion_increment_from_angular_velocity(
+    angular_velocity_rad_s: Sequence[float],
+    dt_s: float,
+) -> tuple[float, float, float, float]:
+    if len(angular_velocity_rad_s) != 3:
+        raise ValueError("angular_velocity_rad_s must contain exactly 3 values")
+    dt = float(dt_s)
+    if not isfinite(dt):
+        raise ValueError("dt_s must be finite")
+    omega_x = float(angular_velocity_rad_s[0])
+    omega_y = float(angular_velocity_rad_s[1])
+    omega_z = float(angular_velocity_rad_s[2])
+    omega_norm = sqrt(omega_x * omega_x + omega_y * omega_y + omega_z * omega_z)
+    if omega_norm == 0.0 or dt == 0.0:
+        return (1.0, 0.0, 0.0, 0.0)
+    half_angle = 0.5 * omega_norm * dt
+    scale = sin(half_angle) / omega_norm
+    return normalize_quaternion(
+        (
+            cos(half_angle),
+            omega_x * scale,
+            omega_y * scale,
+            omega_z * scale,
+        )
     )
 
 

@@ -7,7 +7,7 @@ from dataclasses import replace
 import numpy as np
 
 from simulador_multirotor.runner import SimulationRunner
-from simulador_multirotor.scenarios import ScenarioTelemetryConfig, build_minimal_scenario
+from simulador_multirotor.scenarios import ScenarioDisturbanceConfig, ScenarioMetadata, ScenarioTelemetryConfig, build_minimal_scenario
 from simulador_multirotor.telemetry import export_history_to_csv, export_history_to_json, export_history_to_numpy
 
 
@@ -29,6 +29,27 @@ def test_telemetry_schema_records_errors_and_events() -> None:
     assert history.vehicle_metadata["mass_kg"] == history.scenario_metadata["vehicle"]["mass_kg"]
     assert history.controller_metadata["kind"] == "cascade"
     assert history.scenario_metadata["telemetry"]["detail_level"] == "standard"
+
+
+def test_telemetry_preserves_true_and_observed_state_separately() -> None:
+    scenario = replace(
+        build_minimal_scenario(),
+        metadata=ScenarioMetadata(name="noisy-telemetry", seed=7),
+        disturbances=ScenarioDisturbanceConfig(
+            enabled=True,
+            observation_position_noise_std_m=0.05,
+            observation_velocity_noise_std_m_s=0.01,
+        ),
+    )
+
+    history = SimulationRunner().run(scenario)
+    step = history.steps[0]
+    payload = step.to_dict(detail_level="full")
+
+    assert step.observation.true_state.time_s == step.observation.observed_state.time_s
+    assert step.observation.true_state != step.observation.observed_state
+    assert payload["observation"]["true_state"]["time_s"] == step.observation.true_state.time_s
+    assert payload["observation"]["observed_state"]["time_s"] == step.observation.observed_state.time_s
 
 
 def test_export_formats_preserve_metadata_and_detail_level_control(tmp_path) -> None:

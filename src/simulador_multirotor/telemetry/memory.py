@@ -47,6 +47,14 @@ def _serialize_state(state: VehicleState) -> dict[str, object]:
     }
 
 
+def _serialize_observation(observation: VehicleObservation) -> dict[str, object]:
+    return {
+        "true_state": _serialize_state(observation.true_state),
+        "observed_state": _serialize_state(observation.observed_state),
+        "metadata": _serialize_mapping(observation.metadata),
+    }
+
+
 def _serialize_reference(reference: TrajectoryReference) -> dict[str, object]:
     return {
         "time_s": reference.time_s,
@@ -188,6 +196,7 @@ class SimulationStep:
             "index": self.index,
             "time_s": self.time_s,
             "state": _serialize_state(self.state),
+            "true_state": _serialize_state(self.state),
             "reference": _serialize_reference(self.reference),
             "error": self.error.to_dict(),
             "command": _serialize_command(self.command),
@@ -198,13 +207,23 @@ class SimulationStep:
             record.pop("metadata")
             record.pop("events")
             record["observation"] = None
+            record["observed_state"] = _serialize_state(self.observation.observed_state)
         else:
-            record["observation"] = _serialize_state(self.observation.state)
+            record["observation"] = _serialize_observation(self.observation)
+            record["observed_state"] = _serialize_state(self.observation.observed_state)
             if detail_level != "full":
                 record["observation"] = {
-                    "position_m": self.observation.state.position_m,
-                    "linear_velocity_m_s": self.observation.state.linear_velocity_m_s,
-                    "time_s": self.observation.state.time_s,
+                    "true_state": {
+                        "position_m": self.observation.true_state.position_m,
+                        "linear_velocity_m_s": self.observation.true_state.linear_velocity_m_s,
+                        "time_s": self.observation.true_state.time_s,
+                    },
+                    "observed_state": {
+                        "position_m": self.observation.observed_state.position_m,
+                        "linear_velocity_m_s": self.observation.observed_state.linear_velocity_m_s,
+                        "time_s": self.observation.observed_state.time_s,
+                    },
+                    "metadata": _serialize_mapping(self.observation.metadata),
                 }
         return record
 

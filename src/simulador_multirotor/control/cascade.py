@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from ..core.attitude import euler_from_quaternion
-from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleObservation, VehicleState
+from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleIntent, VehicleObservation, VehicleState
 from .contract import ControllerContract
 
 
@@ -154,8 +154,10 @@ class AttitudeLoopController:
         )
 
         return VehicleCommand(
-            collective_thrust_newton=collective_thrust,
-            body_torque_nm=torque_command,
+            intent=VehicleIntent(
+                collective_thrust_newton=collective_thrust,
+                body_torque_nm=torque_command,
+            ),
         )
 
 

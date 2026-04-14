@@ -28,7 +28,8 @@ class SimulationRunner:
             reference = trajectory.reference_at(time_s)
             observed_state = scenario.disturbances.perturb_observation(state, rng)
             observation = VehicleObservation(
-                state=observed_state,
+                true_state=state,
+                observed_state=observed_state,
                 metadata={
                     "step": step_index,
                     "seed": scenario.seed,
@@ -39,7 +40,7 @@ class SimulationRunner:
             command = controller.compute_action(observation, reference)
             state = dynamics.step(state, command, step_dt)
             time_s = state.time_s
-            error = TrackingError.from_state_and_reference(state=observation.state, reference=reference)
+            error = TrackingError.from_state_and_reference(state=observation.true_state, reference=reference)
             events: list[TelemetryEvent] = []
             if step_index == 0:
                 events.append(

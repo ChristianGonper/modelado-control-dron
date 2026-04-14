@@ -63,3 +63,40 @@ def test_dynamics_rejects_non_positive_dt() -> None:
             0.0,
         )
 
+
+def test_dynamics_uses_euler_equation_with_gyroscopic_coupling() -> None:
+    parameters = RigidBodyParameters(
+        mass_kg=1.0,
+        gravity_m_s2=0.0,
+        inertia_kg_m2=(1.0, 2.0, 3.0),
+    )
+    dynamics = RigidBody6DOFDynamics(parameters=parameters)
+    state = VehicleState(
+        position_m=(0.0, 0.0, 0.0),
+        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+        linear_velocity_m_s=(0.0, 0.0, 0.0),
+        angular_velocity_rad_s=(1.0, 2.0, 3.0),
+    )
+    command = VehicleCommand(collective_thrust_newton=0.0, body_torque_nm=(0.0, 0.0, 0.0))
+
+    derivative = dynamics.evaluate_derivative(state, command)
+
+    assert derivative.angular_velocity_rad_s2 == pytest.approx((-6.0, 3.0, -2.0 / 3.0))
+
+
+def test_step_preserves_quaternion_norm_under_rotation() -> None:
+    dynamics = RigidBody6DOFDynamics(
+        parameters=RigidBodyParameters(gravity_m_s2=0.0),
+    )
+    state = VehicleState(
+        position_m=(0.0, 0.0, 0.0),
+        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+        linear_velocity_m_s=(0.0, 0.0, 0.0),
+        angular_velocity_rad_s=(0.0, 0.0, 8.0),
+    )
+
+    next_state = dynamics.step(state, VehicleCommand(collective_thrust_newton=0.0, body_torque_nm=(0.0, 0.0, 0.0)), 0.25)
+
+    norm = sum(component * component for component in next_state.orientation_wxyz)
+    assert norm == pytest.approx(1.0, abs=1e-9)
+
