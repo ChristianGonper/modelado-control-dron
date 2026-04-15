@@ -34,4 +34,5 @@ Base inicial del simulador modular para un dron multirotor. Esta primera fase de
 - [Estado actual del simulador](docs/estado_actual_simulador.md)
 - [Backlog técnico recomendado](docs/backlog_tecnico.md)
 - [Puntos de extensión](docs/extension-points.md)
+- [Robustez y entrega Phase 6](docs/phase6_robustness_and_delivery.md)
 - [Decisiones](docs/decisions/): ADRs de arquitectura y decisiones de diseño por fase

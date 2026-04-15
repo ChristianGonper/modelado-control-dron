@@ -234,6 +234,27 @@ class ReportArtifactBundle:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class RobustnessReportArtifactBundle:
+    benchmark_path: Path
+    output_dir: Path
+    table_path: Path
+    report_path: Path
+    figure_paths: dict[str, dict[str, Path]]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "benchmark_path": str(self.benchmark_path),
+            "output_dir": str(self.output_dir),
+            "table_path": str(self.table_path),
+            "report_path": str(self.report_path),
+            "figure_paths": {
+                scenario: {kind: str(path) for kind, path in paths.items()}
+                for scenario, paths in self.figure_paths.items()
+            },
+        }
+
+
 def build_consolidated_model_summaries(
     source: str | Path | Mapping[str, object],
     *,
@@ -324,6 +345,41 @@ def build_consolidated_table_markdown(
                 smoothness=summary.smoothness_score,
                 cpu=summary.mean_cpu_inference_time_s_mean,
                 score=summary.total_score,
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def build_ood_robustness_table_markdown(
+    source: str | Path | Mapping[str, object],
+    *,
+    candidate_models: Sequence[str] = ("mlp", "gru", "lstm"),
+) -> str:
+    summaries = build_consolidated_model_summaries(source, candidate_models=candidate_models)
+    if not summaries:
+        raise ValueError("benchmark payload did not produce any summaries")
+
+    lines = [
+        "# Phase 6 OOD Robustness Summary",
+        "",
+        "Control is computed from `observed_state` and tracking is evaluated on `true_state`.",
+        "This battery is reported separately and is not used for model selection.",
+        "",
+        "| Model | Scenarios | Position RMSE [m] | Yaw RMSE [rad] | Smoothness score | CPU inference [s] | RMSE vs baseline | Smoothness vs baseline | Inference vs baseline |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for summary in summaries:
+        lines.append(
+            "| {model} | {count} | {rmse:.4f} | {yaw:.4f} | {smoothness:.4f} | {cpu:.6f} | {rmse_ratio} | {smoothness_ratio} | {inference_ratio} |".format(
+                model=summary.model_key,
+                count=summary.scenario_count,
+                rmse=summary.mean_position_rmse_m,
+                yaw=summary.mean_yaw_rmse_rad,
+                smoothness=summary.smoothness_score,
+                cpu=summary.mean_cpu_inference_time_s_mean,
+                rmse_ratio="n/a" if summary.baseline_position_rmse_ratio is None else f"{summary.baseline_position_rmse_ratio:.3f}",
+                smoothness_ratio="n/a" if summary.baseline_smoothness_ratio is None else f"{summary.baseline_smoothness_ratio:.3f}",
+                inference_ratio="n/a" if summary.baseline_inference_ratio is None else f"{summary.baseline_inference_ratio:.3f}",
             )
         )
     return "\n".join(lines) + "\n"
@@ -538,5 +594,55 @@ def generate_phase5_report(
         table_path=table_path,
         report_path=report_path,
         selection_path=selection_path,
+        figure_paths=figure_paths,
+    )
+
+
+def generate_ood_report(
+    benchmark_source: str | Path | Mapping[str, object],
+    output_dir: str | Path,
+) -> RobustnessReportArtifactBundle:
+    payload = _load_payload(benchmark_source)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    scenario_set_key = str(payload.get("scenario_set_key", "unknown"))
+
+    table_markdown = build_ood_robustness_table_markdown(payload)
+    table_path = output_path / "ood_comparison_table.md"
+    table_path.write_text(table_markdown, encoding="utf-8")
+
+    figure_paths = render_benchmark_figures(payload, output_path / "figures")
+
+    report_lines = [
+        "# Phase 6 OOD Robustness Report",
+        "",
+        "Control is computed from `observed_state` and tracking is evaluated on `true_state`.",
+        "",
+        "## Boundary",
+        "",
+        "This battery is separate from the main split and is not used for model selection.",
+        f"- Scenario set: `{scenario_set_key}`",
+        "",
+        "## Consolidated Table",
+        "",
+        table_markdown.rstrip(),
+        "",
+        "## Figures",
+        "",
+    ]
+    for scenario_label, paths in figure_paths.items():
+        report_lines.append(f"### {scenario_label}")
+        for kind, path in paths.items():
+            report_lines.append(f"- {kind}: [{path.name}]({path})")
+        report_lines.append("")
+
+    report_path = output_path / "ood_report.md"
+    report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
+
+    return RobustnessReportArtifactBundle(
+        benchmark_path=Path(benchmark_source) if isinstance(benchmark_source, (str, Path)) else output_path / "benchmark.json",
+        output_dir=output_path,
+        table_path=table_path,
+        report_path=report_path,
         figure_paths=figure_paths,
     )

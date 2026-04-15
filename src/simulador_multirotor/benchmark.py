@@ -13,6 +13,7 @@ from .control.mlp import load_mlp_controller
 from .control.recurrent import load_recurrent_controller
 from .control.contract import ControllerContract
 from .metrics import compare_tracking_metrics, compute_tracking_metrics
+from .robustness import OOD_ROBUSTNESS_SCENARIO_SET_KEY, build_ood_robustness_scenarios
 from .runner import SimulationRunner
 from .scenarios import SimulationScenario
 
@@ -162,12 +163,16 @@ class NeuralBenchmarkScenarioResult:
 
 @dataclass(frozen=True, slots=True)
 class NeuralBenchmarkResult:
+    benchmark_kind: str
+    scenario_set_key: str
     checkpoint_paths: dict[str, Path]
     output_path: Path
     results: tuple[NeuralBenchmarkScenarioResult, ...]
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "benchmark_kind": self.benchmark_kind,
+            "scenario_set_key": self.scenario_set_key,
             "checkpoint_paths": {key: str(value) for key, value in self.checkpoint_paths.items()},
             "output_path": str(self.output_path),
             "results": [result.to_dict() for result in self.results],
@@ -210,13 +215,15 @@ def _controller_result_from_history(
     )
 
 
-def run_homogeneous_neural_benchmark(
+def _run_neural_benchmark(
     scenarios: Sequence[SimulationScenario],
     *,
     mlp_checkpoint_path: str | Path,
     gru_checkpoint_path: str | Path,
     lstm_checkpoint_path: str | Path,
     output_path: str | Path,
+    benchmark_kind: str,
+    scenario_set_key: str,
 ) -> NeuralBenchmarkResult:
     scenarios = tuple(scenarios)
     if not scenarios:
@@ -278,9 +285,50 @@ def run_homogeneous_neural_benchmark(
         )
 
     result = NeuralBenchmarkResult(
+        benchmark_kind=benchmark_kind,
+        scenario_set_key=scenario_set_key,
         checkpoint_paths=checkpoint_paths,
         output_path=resolved_output_path,
         results=tuple(results),
     )
     resolved_output_path.write_text(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return result
+
+
+def run_homogeneous_neural_benchmark(
+    scenarios: Sequence[SimulationScenario],
+    *,
+    mlp_checkpoint_path: str | Path,
+    gru_checkpoint_path: str | Path,
+    lstm_checkpoint_path: str | Path,
+    output_path: str | Path,
+) -> NeuralBenchmarkResult:
+    return _run_neural_benchmark(
+        scenarios,
+        mlp_checkpoint_path=mlp_checkpoint_path,
+        gru_checkpoint_path=gru_checkpoint_path,
+        lstm_checkpoint_path=lstm_checkpoint_path,
+        output_path=output_path,
+        benchmark_kind="main",
+        scenario_set_key="main-homogeneous-v1",
+    )
+
+
+def run_ood_robustness_benchmark(
+    scenarios: Sequence[SimulationScenario] | None = None,
+    *,
+    mlp_checkpoint_path: str | Path,
+    gru_checkpoint_path: str | Path,
+    lstm_checkpoint_path: str | Path,
+    output_path: str | Path,
+) -> NeuralBenchmarkResult:
+    resolved_scenarios = build_ood_robustness_scenarios() if scenarios is None else tuple(scenarios)
+    return _run_neural_benchmark(
+        resolved_scenarios,
+        mlp_checkpoint_path=mlp_checkpoint_path,
+        gru_checkpoint_path=gru_checkpoint_path,
+        lstm_checkpoint_path=lstm_checkpoint_path,
+        output_path=output_path,
+        benchmark_kind="ood",
+        scenario_set_key=OOD_ROBUSTNESS_SCENARIO_SET_KEY,
+    )
