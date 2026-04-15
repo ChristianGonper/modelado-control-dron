@@ -9,6 +9,7 @@ Primary expected input:
 The orchestrator is the control plane for a multi-phase implementation derived from a task-breakdown file:
 - It advances the plan one phase at a time.
 - It keeps responsibility for supervision, review, and next-step decisions.
+- It stays active until every phase is reviewed and closed.
 - It uses subagents as workers, not as replacements for orchestration.
 
 The task-breakdown file is the source of truth for:
@@ -34,8 +35,10 @@ For each phase:
    - Dependencies or checkpoint constraints
    - Documentation or git expectations
    - Using Context7 for libraries documentation.
-3. Launch the subagent with the model named by the user.
+3. Launch a fresh subagent for that phase with the model named by the user.
+   - Do not reuse a previous phase worker unless the user explicitly asks for it.
    - Explicitly tell the subagent to open the task-breakdown file first and use it as detailed execution context.
+   - Explicitly tell the subagent that it may invoke [$documentation-and-adrs](../documentation-and-adrs/SKILL.md) when the phase creates durable decisions or architecture changes.
 4. Stay active and monitor progress.
 5. Review the completed work:
    - Check correctness and regressions
@@ -69,7 +72,7 @@ Typical triggers:
 
 ## Recommended Handoff Template
 
-Use a brief like this for each subagent:
+Use a brief like this for each phase subagent:
 
 ```md
 Implement Phase [N]: [title]
@@ -97,7 +100,7 @@ Constraints:
 - Stay within the assigned scope
 - Do not revert unrelated work
 - [Use / do not use Context7 and Exa]
-- [Document decisions if needed]
+- You may invoke [$documentation-and-adrs](../documentation-and-adrs/SKILL.md) if this phase introduces decisions worth recording
 
 Output:
 - Summary of changes
