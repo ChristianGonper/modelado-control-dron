@@ -49,10 +49,16 @@ If a reference does not expose acceleration, the dataset fills the three acceler
 - The intended main split is 70/15/15 by episodes.
 - Split assignment must remain deterministic for a fixed seed and traceability bucket.
 
+## Window Semantics
+
+- MLP windows are flattened, default to 30 steps, and use stride 10 in train and validation.
+- GRU and LSTM windows preserve temporal order as `[sequence_length, feature_dim]`.
+- Derived windows inherit the split and traceability of the source episode.
+- Window metadata records the source episode id, architecture, window size, stride, and split provenance.
+
 ## Validation Rules
 
 - Missing scenario metadata is a hard error.
 - Missing telemetry metadata required for dataset construction is a hard error.
 - Missing sample columns in a persisted export are a hard error.
 - Telemetry must be anchored to `true_state` tracking for this phase.
-
