@@ -30,6 +30,7 @@ from .split import (
 from .features import (
     build_feature_matrix,
     build_feature_vector,
+    build_feature_vector_from_observation,
     build_target_matrix,
     build_target_vector,
     feature_dimension_for_mode,
@@ -71,6 +72,7 @@ __all__ = [
     "SPLIT_NAMES",
     "build_feature_matrix",
     "build_feature_vector",
+    "build_feature_vector_from_observation",
     "build_mlp_windows",
     "build_target_matrix",
     "build_target_vector",

@@ -84,10 +84,11 @@ class DatasetWindow:
             raise ValueError("feature_dimension must be positive")
         if self.split_context is not None and self.split_context.episode_id != self.episode_id:
             raise ValueError("split_context episode_id must match the window episode")
-        expected_indices = tuple(range(self.start_index, self.end_index))
         actual_indices = tuple(sample.index for sample in self.samples)
-        if actual_indices != expected_indices:
-            raise ValueError("window samples must be contiguous and ordered")
+        if tuple(sorted(actual_indices)) != actual_indices:
+            raise ValueError("window samples must be ordered")
+        if len(set(actual_indices)) != len(actual_indices):
+            raise ValueError("window samples must not repeat indices")
         if self.flattened:
             expected_feature_shape = (self.window_size * self.feature_dimension,)
             if self.features.shape != expected_feature_shape:

@@ -6,7 +6,14 @@ from math import cos, sin
 
 import numpy as np
 
-from .contract import PHASE2_DATASET_CONTRACT, DatasetEpisode, DatasetSample, _observed_yaw_rad, _reference_acceleration
+from ..core.contracts import TrajectoryReference, VehicleObservation
+from .contract import (
+    PHASE2_DATASET_CONTRACT,
+    DatasetEpisode,
+    DatasetSample,
+    _observed_yaw_rad,
+    _reference_acceleration,
+)
 
 
 def feature_names_for_mode(mode: str) -> tuple[str, ...]:
@@ -25,35 +32,70 @@ def target_dimension() -> int:
     return PHASE2_DATASET_CONTRACT.target_dimension
 
 
-def _base_feature_values(sample: DatasetSample) -> tuple[float, ...]:
-    reference_acceleration = _reference_acceleration(sample.reference)
-    yaw_sin = sin(sample.reference.yaw_rad)
-    yaw_cos = cos(sample.reference.yaw_rad)
+def _base_feature_values_from_observation(
+    observation: VehicleObservation,
+    reference: TrajectoryReference,
+) -> tuple[float, ...]:
+    reference_acceleration = _reference_acceleration(reference)
+    yaw_sin = sin(reference.yaw_rad)
+    yaw_cos = cos(reference.yaw_rad)
     return (
-        sample.observed_state.position_m[0],
-        sample.observed_state.position_m[1],
-        sample.observed_state.position_m[2],
-        sample.observed_state.linear_velocity_m_s[0],
-        sample.observed_state.linear_velocity_m_s[1],
-        sample.observed_state.linear_velocity_m_s[2],
-        sample.observed_state.orientation_wxyz[0],
-        sample.observed_state.orientation_wxyz[1],
-        sample.observed_state.orientation_wxyz[2],
-        sample.observed_state.orientation_wxyz[3],
-        sample.observed_state.angular_velocity_rad_s[0],
-        sample.observed_state.angular_velocity_rad_s[1],
-        sample.observed_state.angular_velocity_rad_s[2],
-        sample.reference.position_m[0],
-        sample.reference.position_m[1],
-        sample.reference.position_m[2],
-        sample.reference.velocity_m_s[0],
-        sample.reference.velocity_m_s[1],
-        sample.reference.velocity_m_s[2],
+        observation.observed_state.position_m[0],
+        observation.observed_state.position_m[1],
+        observation.observed_state.position_m[2],
+        observation.observed_state.linear_velocity_m_s[0],
+        observation.observed_state.linear_velocity_m_s[1],
+        observation.observed_state.linear_velocity_m_s[2],
+        observation.observed_state.orientation_wxyz[0],
+        observation.observed_state.orientation_wxyz[1],
+        observation.observed_state.orientation_wxyz[2],
+        observation.observed_state.orientation_wxyz[3],
+        observation.observed_state.angular_velocity_rad_s[0],
+        observation.observed_state.angular_velocity_rad_s[1],
+        observation.observed_state.angular_velocity_rad_s[2],
+        reference.position_m[0],
+        reference.position_m[1],
+        reference.position_m[2],
+        reference.velocity_m_s[0],
+        reference.velocity_m_s[1],
+        reference.velocity_m_s[2],
         reference_acceleration[0],
         reference_acceleration[1],
         reference_acceleration[2],
         yaw_sin,
         yaw_cos,
+    )
+
+
+def _base_feature_values(sample: DatasetSample) -> tuple[float, ...]:
+    return _base_feature_values_from_observation(sample.observation, sample.reference)
+
+
+def _error_feature_values_from_observation(
+    observation: VehicleObservation,
+    reference: TrajectoryReference,
+) -> tuple[float, ...]:
+    position_error = tuple(
+        reference_value - observed_value
+        for reference_value, observed_value in zip(reference.position_m, observation.observed_state.position_m)
+    )
+    velocity_error = tuple(
+        reference_velocity - observed_velocity
+        for reference_velocity, observed_velocity in zip(
+            reference.velocity_m_s,
+            observation.observed_state.linear_velocity_m_s,
+        )
+    )
+    yaw_error = reference.yaw_rad - _observed_yaw_rad(observation.observed_state)
+    return (
+        position_error[0],
+        position_error[1],
+        position_error[2],
+        velocity_error[0],
+        velocity_error[1],
+        velocity_error[2],
+        sin(yaw_error),
+        cos(yaw_error),
     )
 
 
@@ -79,6 +121,20 @@ def build_feature_vector(sample: DatasetSample, mode: str) -> tuple[float, ...]:
     if normalized_mode == "raw_observation":
         return base_values
     return base_values + _error_feature_values(sample)
+
+
+def build_feature_vector_from_observation(
+    observation: VehicleObservation,
+    reference: TrajectoryReference,
+    mode: str,
+) -> tuple[float, ...]:
+    normalized_mode = str(mode).strip().lower()
+    if normalized_mode not in PHASE2_DATASET_CONTRACT.feature_modes:
+        raise ValueError(f"unsupported feature mode: {mode}")
+    base_values = _base_feature_values_from_observation(observation, reference)
+    if normalized_mode == "raw_observation":
+        return base_values
+    return base_values + _error_feature_values_from_observation(observation, reference)
 
 
 def build_feature_matrix(episode: DatasetEpisode, mode: str) -> np.ndarray:
