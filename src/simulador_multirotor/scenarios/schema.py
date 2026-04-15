@@ -7,14 +7,16 @@ telemetry, and experiment metadata into a single extensible contract.
 
 from __future__ import annotations
 
+import json
 import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from math import isfinite
+from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar, Mapping, Sequence
 
 from ..control import AttitudeLoopController, CascadedController, ControllerContract, NullController, PositionLoopController
-from ..core.contracts import TrajectoryReference, VehicleState
+from ..core.contracts import RotorGeometry, TrajectoryReference, VehicleState
 from ..dynamics import AerodynamicEnvironment, RigidBody6DOFDynamics, RigidBodyParameters
 from ..trajectories import TrajectoryContract, build_trajectory_from_config
 
@@ -45,6 +47,13 @@ def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
     return MappingProxyType(dict(value))
 
 
+def _is_multiple_of(value: float, base: float, *, tolerance: float = 1e-9) -> bool:
+    if base <= 0.0:
+        return False
+    ratio = value / base
+    return abs(ratio - round(ratio)) <= tolerance
+
+
 def _state_to_summary(state: VehicleState) -> dict[str, object]:
     return {
         "position_m": state.position_m,
@@ -53,6 +62,165 @@ def _state_to_summary(state: VehicleState) -> dict[str, object]:
         "angular_velocity_rad_s": state.angular_velocity_rad_s,
         "time_s": state.time_s,
     }
+
+
+def _serialize_value(value: object) -> object:
+    if is_dataclass(value):
+        return {field.name: _serialize_value(getattr(value, field.name)) for field in fields(value)}
+    if isinstance(value, Mapping):
+        return {key: _serialize_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_serialize_value(item) for item in value)
+    if isinstance(value, list):
+        return [_serialize_value(item) for item in value]
+    return value
+
+
+SCENARIO_SCHEMA_VERSION = 1
+
+
+def _dump_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2)
+
+
+def _payload_mapping(payload: Mapping[str, object], field_name: str) -> Mapping[str, object]:
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"{field_name} must be a mapping")
+    return payload
+
+
+def _require_keys(payload: Mapping[str, object], required_keys: Sequence[str], field_name: str) -> None:
+    missing = [key for key in required_keys if key not in payload]
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"{field_name} is missing required keys: {joined}")
+
+
+def _reject_unknown_keys(payload: Mapping[str, object], allowed_keys: Sequence[str], field_name: str) -> None:
+    unknown = sorted(key for key in payload if key not in allowed_keys)
+    if unknown:
+        joined = ", ".join(unknown)
+        raise ValueError(f"{field_name} contains unsupported keys: {joined}")
+
+
+def _state_from_payload(payload: Mapping[str, object], *, field_name: str) -> VehicleState:
+    payload = _payload_mapping(payload, field_name)
+    _require_keys(payload, ("position_m", "orientation_wxyz", "linear_velocity_m_s", "angular_velocity_rad_s", "time_s"), field_name)
+    _reject_unknown_keys(payload, ("position_m", "orientation_wxyz", "linear_velocity_m_s", "angular_velocity_rad_s", "time_s"), field_name)
+    return VehicleState(
+        position_m=_coerce_vector(payload["position_m"], length=3, field_name=f"{field_name}.position_m"),
+        orientation_wxyz=_coerce_vector(payload["orientation_wxyz"], length=4, field_name=f"{field_name}.orientation_wxyz"),
+        linear_velocity_m_s=_coerce_vector(
+            payload["linear_velocity_m_s"],
+            length=3,
+            field_name=f"{field_name}.linear_velocity_m_s",
+        ),
+        angular_velocity_rad_s=_coerce_vector(
+            payload["angular_velocity_rad_s"],
+            length=3,
+            field_name=f"{field_name}.angular_velocity_rad_s",
+        ),
+        time_s=payload["time_s"],
+    )
+
+
+def _rotor_from_payload(payload: Mapping[str, object], *, field_name: str) -> RotorGeometry:
+    payload = _payload_mapping(payload, field_name)
+    allowed_keys = (
+        "name",
+        "position_m",
+        "axis_body",
+        "spin_direction",
+        "thrust_coefficient_newton_per_rad_s2",
+        "reaction_torque_coefficient_nm_per_newton",
+        "motor_inertia_kg_m2",
+        "time_constant_s",
+        "max_angular_speed_rad_s",
+        "metadata",
+    )
+    _require_keys(
+        payload,
+        (
+            "name",
+            "position_m",
+            "axis_body",
+            "spin_direction",
+            "thrust_coefficient_newton_per_rad_s2",
+            "reaction_torque_coefficient_nm_per_newton",
+            "motor_inertia_kg_m2",
+        ),
+        field_name,
+    )
+    _reject_unknown_keys(payload, allowed_keys, field_name)
+    metadata = payload.get("metadata", {})
+    if not isinstance(metadata, Mapping):
+        raise ValueError(f"{field_name}.metadata must be a mapping")
+    return RotorGeometry(
+        name=payload["name"],
+        position_m=_coerce_vector(payload["position_m"], length=3, field_name=f"{field_name}.position_m"),
+        axis_body=_coerce_vector(payload["axis_body"], length=3, field_name=f"{field_name}.axis_body"),
+        spin_direction=payload["spin_direction"],
+        thrust_coefficient_newton_per_rad_s2=payload["thrust_coefficient_newton_per_rad_s2"],
+        reaction_torque_coefficient_nm_per_newton=payload["reaction_torque_coefficient_nm_per_newton"],
+        motor_inertia_kg_m2=payload["motor_inertia_kg_m2"],
+        time_constant_s=payload.get("time_constant_s"),
+        max_angular_speed_rad_s=payload.get("max_angular_speed_rad_s"),
+        metadata=metadata if isinstance(metadata, Mapping) else dict(metadata),
+    )
+
+
+def _vehicle_from_payload(payload: Mapping[str, object], *, field_name: str) -> RigidBodyParameters:
+    payload = _payload_mapping(payload, field_name)
+    allowed_keys = (
+        "mass_kg",
+        "gravity_m_s2",
+        "inertia_kg_m2",
+        "max_collective_thrust_newton",
+        "max_body_torque_nm",
+        "motor_time_constant_s",
+        "aerodynamic_force_model",
+        "parasitic_drag_area_m2",
+        "air_density_kg_m3",
+        "induced_hover_loss_ratio",
+        "rotors",
+    )
+    _require_keys(
+        payload,
+        (
+            "mass_kg",
+            "gravity_m_s2",
+            "inertia_kg_m2",
+            "max_collective_thrust_newton",
+            "max_body_torque_nm",
+            "motor_time_constant_s",
+            "aerodynamic_force_model",
+            "parasitic_drag_area_m2",
+            "air_density_kg_m3",
+            "induced_hover_loss_ratio",
+            "rotors",
+        ),
+        field_name,
+    )
+    _reject_unknown_keys(payload, allowed_keys, field_name)
+    rotors_payload = payload["rotors"]
+    if isinstance(rotors_payload, (str, bytes)) or not isinstance(rotors_payload, Sequence):
+        raise ValueError(f"{field_name}.rotors must be a sequence")
+    return RigidBodyParameters(
+        mass_kg=payload["mass_kg"],
+        gravity_m_s2=payload["gravity_m_s2"],
+        inertia_kg_m2=_coerce_vector(payload["inertia_kg_m2"], length=3, field_name=f"{field_name}.inertia_kg_m2"),
+        max_collective_thrust_newton=payload["max_collective_thrust_newton"],
+        max_body_torque_nm=_coerce_vector(payload["max_body_torque_nm"], length=3, field_name=f"{field_name}.max_body_torque_nm"),
+        motor_time_constant_s=payload["motor_time_constant_s"],
+        aerodynamic_force_model=payload["aerodynamic_force_model"],
+        parasitic_drag_area_m2=payload["parasitic_drag_area_m2"],
+        air_density_kg_m3=payload["air_density_kg_m3"],
+        induced_hover_loss_ratio=payload["induced_hover_loss_ratio"],
+        rotors=tuple(
+            _rotor_from_payload(rotor_payload, field_name=f"{field_name}.rotors[{index}]")
+            for index, rotor_payload in enumerate(rotors_payload)
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,21 +242,43 @@ class ScenarioMetadata:
 @dataclass(frozen=True, slots=True)
 class ScenarioTimeConfig:
     duration_s: float
-    dt_s: float
+    dt_s: float | None = None
+    physics_dt_s: float | None = None
+    control_dt_s: float | None = None
     telemetry_dt_s: float | None = None
 
     def __post_init__(self) -> None:
         duration_s = _coerce_float(self.duration_s, "duration_s")
-        dt_s = _coerce_float(self.dt_s, "dt_s")
+        physics_dt_s = self.physics_dt_s if self.physics_dt_s is not None else self.dt_s
+        if physics_dt_s is None:
+            raise ValueError("physics_dt_s or dt_s must be provided")
+        physics_dt_s = _coerce_float(physics_dt_s, "physics_dt_s")
         if duration_s <= 0.0:
             raise ValueError("duration_s must be positive")
-        if dt_s <= 0.0:
-            raise ValueError("dt_s must be positive")
+        if physics_dt_s <= 0.0:
+            raise ValueError("physics_dt_s must be positive")
+        control_dt_s = _coerce_optional_float(self.control_dt_s, "control_dt_s")
+        if control_dt_s is None:
+            control_dt_s = physics_dt_s
         telemetry_dt_s = _coerce_optional_float(self.telemetry_dt_s, "telemetry_dt_s")
+        if telemetry_dt_s is None:
+            telemetry_dt_s = control_dt_s
+        if control_dt_s <= 0.0:
+            raise ValueError("control_dt_s must be positive")
         if telemetry_dt_s is not None and telemetry_dt_s <= 0.0:
             raise ValueError("telemetry_dt_s must be positive")
+        if control_dt_s < physics_dt_s - 1e-12:
+            raise ValueError("control_dt_s must be greater than or equal to physics_dt_s")
+        if telemetry_dt_s < physics_dt_s - 1e-12:
+            raise ValueError("telemetry_dt_s must be greater than or equal to physics_dt_s")
+        if not _is_multiple_of(control_dt_s, physics_dt_s):
+            raise ValueError("control_dt_s must be an integer multiple of physics_dt_s")
+        if not _is_multiple_of(telemetry_dt_s, physics_dt_s):
+            raise ValueError("telemetry_dt_s must be an integer multiple of physics_dt_s")
         object.__setattr__(self, "duration_s", duration_s)
-        object.__setattr__(self, "dt_s", dt_s)
+        object.__setattr__(self, "dt_s", physics_dt_s)
+        object.__setattr__(self, "physics_dt_s", physics_dt_s)
+        object.__setattr__(self, "control_dt_s", control_dt_s)
         object.__setattr__(self, "telemetry_dt_s", telemetry_dt_s)
 
 
@@ -138,6 +328,7 @@ class ScenarioDisturbanceConfig:
     induced_hover_enabled: bool = False
     wind_velocity_m_s: tuple[float, float, float] = (0.0, 0.0, 0.0)
     wind_gust_std_m_s: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    wind_gust_time_constant_s: float = 0.25
     parasitic_drag_area_m2: float | None = None
     induced_hover_loss_ratio: float | None = None
     observation_position_noise_std_m: float = 0.0
@@ -149,6 +340,9 @@ class ScenarioDisturbanceConfig:
         object.__setattr__(self, "induced_hover_enabled", bool(self.induced_hover_enabled))
         object.__setattr__(self, "wind_velocity_m_s", _coerce_vector(self.wind_velocity_m_s, length=3, field_name="wind_velocity_m_s"))
         object.__setattr__(self, "wind_gust_std_m_s", _coerce_vector(self.wind_gust_std_m_s, length=3, field_name="wind_gust_std_m_s"))
+        object.__setattr__(self, "wind_gust_time_constant_s", _coerce_float(self.wind_gust_time_constant_s, "wind_gust_time_constant_s"))
+        if self.wind_gust_time_constant_s <= 0.0:
+            raise ValueError("wind_gust_time_constant_s must be positive")
         if self.parasitic_drag_area_m2 is not None:
             object.__setattr__(
                 self,
@@ -197,6 +391,7 @@ class ScenarioDisturbanceConfig:
             "induced_hover_enabled": self.induced_hover_enabled,
             "wind_velocity_m_s": self.wind_velocity_m_s,
             "wind_gust_std_m_s": self.wind_gust_std_m_s,
+            "wind_gust_time_constant_s": self.wind_gust_time_constant_s,
             "parasitic_drag_area_m2": self.parasitic_drag_area_m2,
             "induced_hover_loss_ratio": self.induced_hover_loss_ratio,
             "observation_position_noise_std_m": self.observation_position_noise_std_m,
@@ -239,6 +434,7 @@ class ScenarioDisturbanceConfig:
             induced_hover_enabled=self.enabled and self.induced_hover_enabled,
             wind_velocity_m_s=self.wind_velocity_m_s,
             wind_gust_std_m_s=self.wind_gust_std_m_s,
+            wind_gust_time_constant_s=self.wind_gust_time_constant_s,
             parasitic_drag_area_m2=drag_area_m2,
             air_density_kg_m3=vehicle.air_density_kg_m3,
             induced_hover_loss_ratio=induced_hover_loss_ratio,
@@ -320,6 +516,18 @@ class SimulationScenario:
         return self.time.dt_s
 
     @property
+    def physics_dt_s(self) -> float:
+        return self.time.physics_dt_s if self.time.physics_dt_s is not None else self.time.dt_s
+
+    @property
+    def control_dt_s(self) -> float:
+        return self.time.control_dt_s if self.time.control_dt_s is not None else self.physics_dt_s
+
+    @property
+    def telemetry_dt_s(self) -> float:
+        return self.time.telemetry_dt_s if self.time.telemetry_dt_s is not None else self.control_dt_s
+
+    @property
     def seed(self) -> int | None:
         return self.metadata.seed
 
@@ -347,7 +555,12 @@ class SimulationScenario:
         if self.controller.kind not in {"cascade", "pid_cascade"}:
             raise ValueError(f"unsupported controller kind: {self.controller.kind}")
 
-        position_defaults = {"kp_position": (2.0, 2.0, 4.0), "kd_velocity": (1.2, 1.2, 2.5)}
+        position_defaults = {
+            "mass_kg": self.vehicle.mass_kg,
+            "gravity_m_s2": self.vehicle.gravity_m_s2,
+            "kp_position": (2.0, 2.0, 4.0),
+            "kd_velocity": (1.2, 1.2, 2.5),
+        }
         attitude_defaults = {
             "mass_kg": self.vehicle.mass_kg,
             "gravity_m_s2": self.vehicle.gravity_m_s2,
@@ -373,6 +586,117 @@ class SimulationScenario:
     def build_trajectory(self) -> TrajectoryContract:
         return self.trajectory.build_trajectory(initial_state=self.initial_state)
 
+    def to_dict(self) -> dict[str, object]:
+        payload = {"schema_version": SCENARIO_SCHEMA_VERSION}
+        for scenario_field in fields(self):
+            payload[scenario_field.name] = _serialize_value(getattr(self, scenario_field.name))
+        return payload
+
+    def to_json(self, path: str | Path) -> Path:
+        output_path = Path(path)
+        output_path.write_text(_dump_json(self.to_dict()) + "\n", encoding="utf-8")
+        return output_path
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> "SimulationScenario":
+        payload = _payload_mapping(payload, "scenario")
+        _require_keys(
+            payload,
+            (
+                "schema_version",
+                "initial_state",
+                "time",
+                "trajectory",
+                "vehicle",
+                "controller",
+                "disturbances",
+                "telemetry",
+                "metadata",
+            ),
+            "scenario",
+        )
+        _reject_unknown_keys(
+            payload,
+            (
+                "schema_version",
+                "initial_state",
+                "time",
+                "trajectory",
+                "vehicle",
+                "controller",
+                "disturbances",
+                "telemetry",
+                "metadata",
+            ),
+            "scenario",
+        )
+        schema_version = int(payload["schema_version"])
+        if schema_version != SCENARIO_SCHEMA_VERSION:
+            raise ValueError(f"unsupported scenario schema version: {schema_version}")
+        initial_state = _state_from_payload(payload["initial_state"], field_name="scenario.initial_state")
+        time_payload = _payload_mapping(payload["time"], "scenario.time")
+        trajectory_payload = _payload_mapping(payload["trajectory"], "scenario.trajectory")
+        controller_payload = _payload_mapping(payload["controller"], "scenario.controller")
+        disturbances_payload = _payload_mapping(payload["disturbances"], "scenario.disturbances")
+        telemetry_payload = _payload_mapping(payload["telemetry"], "scenario.telemetry")
+        metadata_payload = _payload_mapping(payload["metadata"], "scenario.metadata")
+        _require_keys(time_payload, ("duration_s",), "scenario.time")
+        _require_keys(trajectory_payload, ("kind",), "scenario.trajectory")
+        _require_keys(controller_payload, ("kind",), "scenario.controller")
+        return cls(
+            initial_state=initial_state,
+            time=ScenarioTimeConfig(
+                duration_s=time_payload["duration_s"],
+                dt_s=time_payload.get("dt_s"),
+                physics_dt_s=time_payload.get("physics_dt_s"),
+                control_dt_s=time_payload.get("control_dt_s"),
+                telemetry_dt_s=time_payload.get("telemetry_dt_s"),
+            ),
+            trajectory=ScenarioTrajectoryConfig(
+                kind=trajectory_payload["kind"],
+                target_position_m=trajectory_payload.get("target_position_m", (0.0, 0.0, 1.0)),
+                target_velocity_m_s=trajectory_payload.get("target_velocity_m_s", (0.0, 0.0, 0.0)),
+                target_yaw_rad=trajectory_payload.get("target_yaw_rad", 0.0),
+                valid_until_s=trajectory_payload.get("valid_until_s"),
+                target_acceleration_m_s2=trajectory_payload.get("target_acceleration_m_s2"),
+                source=trajectory_payload.get("source", "native"),
+                parameters=trajectory_payload.get("parameters", {}),
+            ),
+            vehicle=_vehicle_from_payload(_payload_mapping(payload["vehicle"], "scenario.vehicle"), field_name="scenario.vehicle"),
+            controller=ScenarioControllerConfig(
+                kind=controller_payload["kind"],
+                parameters=controller_payload.get("parameters", {}),
+            ),
+            disturbances=ScenarioDisturbanceConfig(
+                enabled=disturbances_payload.get("enabled", False),
+                parasitic_drag_enabled=disturbances_payload.get("parasitic_drag_enabled", False),
+                induced_hover_enabled=disturbances_payload.get("induced_hover_enabled", False),
+                wind_velocity_m_s=disturbances_payload.get("wind_velocity_m_s", (0.0, 0.0, 0.0)),
+                wind_gust_std_m_s=disturbances_payload.get("wind_gust_std_m_s", (0.0, 0.0, 0.0)),
+                wind_gust_time_constant_s=disturbances_payload.get("wind_gust_time_constant_s", 0.25),
+                parasitic_drag_area_m2=disturbances_payload.get("parasitic_drag_area_m2"),
+                induced_hover_loss_ratio=disturbances_payload.get("induced_hover_loss_ratio"),
+                observation_position_noise_std_m=disturbances_payload.get("observation_position_noise_std_m", 0.0),
+                observation_velocity_noise_std_m_s=disturbances_payload.get("observation_velocity_noise_std_m_s", 0.0),
+            ),
+            telemetry=ScenarioTelemetryConfig(
+                record_scenario_metadata=telemetry_payload.get("record_scenario_metadata", True),
+                detail_level=telemetry_payload.get("detail_level", "standard"),
+                sample_dt_s=telemetry_payload.get("sample_dt_s"),
+            ),
+            metadata=ScenarioMetadata(
+                name=metadata_payload.get("name", "nominal-hover"),
+                description=metadata_payload.get("description"),
+                seed=metadata_payload.get("seed"),
+                tags=metadata_payload.get("tags", ()),
+            ),
+        )
+
+    @classmethod
+    def from_json(cls, path: str | Path) -> "SimulationScenario":
+        input_path = Path(path)
+        return cls.from_dict(json.loads(input_path.read_text(encoding="utf-8")))
+
     def describe(self) -> dict[str, object]:
         return {
             "metadata": {
@@ -381,7 +705,7 @@ class SimulationScenario:
                 "seed": self.metadata.seed,
                 "tags": self.metadata.tags,
             },
-            "vehicle": asdict(self.vehicle),
+            "vehicle": _serialize_value(self.vehicle),
             "initial_state": _state_to_summary(self.initial_state),
             "time": asdict(self.time),
             "trajectory": {

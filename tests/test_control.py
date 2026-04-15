@@ -11,6 +11,7 @@ from simulador_multirotor.control import (
     NullController,
     PositionLoopController,
 )
+from simulador_multirotor.core.attitude import quaternion_from_euler
 from simulador_multirotor.core.contracts import TrajectoryReference, VehicleObservation, VehicleState
 
 
@@ -84,3 +85,23 @@ def test_controller_saturates_on_large_errors() -> None:
 
     assert command.collective_thrust_newton == pytest.approx(20.0)
     assert all(abs(component) <= limit for component, limit in zip(command.body_torque_nm, (0.3, 0.3, 0.2)))
+
+
+def test_attitude_loop_responds_to_quaternion_error() -> None:
+    attitude_loop = AttitudeLoopController(
+        mass_kg=1.0,
+        gravity_m_s2=9.81,
+        max_collective_thrust_newton=20.0,
+        max_body_torque_nm=(0.3, 0.3, 0.2),
+    )
+    target = ControlTarget(
+        desired_acceleration_m_s2=(0.0, 0.0, 0.0),
+        desired_yaw_rad=0.0,
+        desired_collective_thrust_newton=9.81,
+        desired_attitude_wxyz=quaternion_from_euler(0.0, 0.0, 0.5 * 3.141592653589793),
+        desired_body_rate_rad_s=(0.0, 0.0, 0.0),
+    )
+
+    command = attitude_loop.compute_command(make_observation().state, target)
+
+    assert command.body_torque_nm[2] != pytest.approx(0.0)

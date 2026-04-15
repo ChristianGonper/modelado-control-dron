@@ -46,6 +46,8 @@ def test_runner_executes_scenarios_with_native_trajectories(kind: str, parameter
     assert history.final_time_s == pytest.approx(scenario.duration_s, abs=1e-9)
     assert history.steps[0].reference.metadata["trajectory_kind"] == kind
     assert history.steps[0].events[0].kind == "simulation_start"
+    assert history.steps[0].metadata["tracking_state_source"] == "true_state"
+    assert history.steps[0].metadata["disturbances"]["wind_model"] == "ornstein_uhlenbeck"
 
 
 def test_runner_accepts_controller_override_stub() -> None:

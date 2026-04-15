@@ -1,0 +1,196 @@
+{
+  "controller": {
+    "kind": "cascade",
+    "parameters": {}
+  },
+  "disturbances": {
+    "enabled": true,
+    "induced_hover_enabled": true,
+    "induced_hover_loss_ratio": null,
+    "observation_position_noise_std_m": 0.01,
+    "observation_velocity_noise_std_m_s": 0.02,
+    "parasitic_drag_area_m2": null,
+    "parasitic_drag_enabled": true,
+    "wind_gust_std_m_s": [
+      0.35,
+      0.35,
+      0.18
+    ],
+    "wind_gust_time_constant_s": 0.4,
+    "wind_velocity_m_s": [
+      0.25,
+      -0.12,
+      0.0
+    ]
+  },
+  "initial_state": {
+    "angular_velocity_rad_s": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "linear_velocity_m_s": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "position_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "time_s": 0.0
+  },
+  "metadata": {
+    "description": "Coarse physics discretization for dt comparison.",
+    "name": "reference-dt-comparison-coarse-v1",
+    "seed": 53,
+    "tags": [
+      "reference",
+      "dt-comparison",
+      "coarse",
+      "v1"
+    ]
+  },
+  "schema_version": 1,
+  "telemetry": {
+    "detail_level": "standard",
+    "record_scenario_metadata": true,
+    "sample_dt_s": null
+  },
+  "time": {
+    "control_dt_s": 0.04,
+    "dt_s": 0.04,
+    "duration_s": 1.6,
+    "physics_dt_s": 0.04,
+    "telemetry_dt_s": 0.04
+  },
+  "trajectory": {
+    "kind": "hover",
+    "parameters": {
+      "scenario": "reference-perturbation-v1"
+    },
+    "source": "native",
+    "target_acceleration_m_s2": null,
+    "target_position_m": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "target_velocity_m_s": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target_yaw_rad": 0.0,
+    "valid_until_s": 1.6
+  },
+  "vehicle": {
+    "aerodynamic_force_model": "aggregated_body",
+    "air_density_kg_m3": 1.225,
+    "gravity_m_s2": 9.81,
+    "induced_hover_loss_ratio": 0.0,
+    "inertia_kg_m2": [
+      0.02,
+      0.02,
+      0.04
+    ],
+    "mass_kg": 1.0,
+    "max_body_torque_nm": [
+      0.3,
+      0.3,
+      0.2
+    ],
+    "max_collective_thrust_newton": 20.0,
+    "motor_time_constant_s": 0.03,
+    "parasitic_drag_area_m2": 0.0,
+    "rotors": [
+      {
+        "axis_body": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "max_angular_speed_rad_s": 2200.0,
+        "metadata": {},
+        "motor_inertia_kg_m2": 1e-05,
+        "name": "front_left",
+        "position_m": [
+          0.11,
+          0.11,
+          0.0
+        ],
+        "reaction_torque_coefficient_nm_per_newton": 1e-07,
+        "spin_direction": 1,
+        "thrust_coefficient_newton_per_rad_s2": 2.5e-06,
+        "time_constant_s": 0.05
+      },
+      {
+        "axis_body": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "max_angular_speed_rad_s": 2200.0,
+        "metadata": {},
+        "motor_inertia_kg_m2": 1e-05,
+        "name": "front_right",
+        "position_m": [
+          0.11,
+          -0.11,
+          0.0
+        ],
+        "reaction_torque_coefficient_nm_per_newton": 1e-07,
+        "spin_direction": -1,
+        "thrust_coefficient_newton_per_rad_s2": 2.5e-06,
+        "time_constant_s": 0.05
+      },
+      {
+        "axis_body": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "max_angular_speed_rad_s": 2200.0,
+        "metadata": {},
+        "motor_inertia_kg_m2": 1e-05,
+        "name": "rear_left",
+        "position_m": [
+          -0.11,
+          0.11,
+          0.0
+        ],
+        "reaction_torque_coefficient_nm_per_newton": 1e-07,
+        "spin_direction": -1,
+        "thrust_coefficient_newton_per_rad_s2": 2.5e-06,
+        "time_constant_s": 0.05
+      },
+      {
+        "axis_body": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "max_angular_speed_rad_s": 2200.0,
+        "metadata": {},
+        "motor_inertia_kg_m2": 1e-05,
+        "name": "rear_right",
+        "position_m": [
+          -0.11,
+          -0.11,
+          0.0
+        ],
+        "reaction_torque_coefficient_nm_per_newton": 1e-07,
+        "spin_direction": 1,
+        "thrust_coefficient_newton_per_rad_s2": 2.5e-06,
+        "time_constant_s": 0.05
+      }
+    ]
+  }
+}

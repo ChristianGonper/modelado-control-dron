@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isfinite, sqrt
+from math import isclose, isfinite, sqrt
 from types import MappingProxyType
 from typing import Mapping
 
@@ -47,6 +47,14 @@ def _serialize_state(state: VehicleState) -> dict[str, object]:
     }
 
 
+def _serialize_observation(observation: VehicleObservation) -> dict[str, object]:
+    return {
+        "true_state": _serialize_state(observation.true_state),
+        "observed_state": _serialize_state(observation.observed_state),
+        "metadata": _serialize_mapping(observation.metadata),
+    }
+
+
 def _serialize_reference(reference: TrajectoryReference) -> dict[str, object]:
     return {
         "time_s": reference.time_s,
@@ -64,6 +72,21 @@ def _serialize_command(command: VehicleCommand) -> dict[str, object]:
     return {
         "collective_thrust_newton": command.collective_thrust_newton,
         "body_torque_nm": command.body_torque_nm,
+        "intent": {
+            "collective_thrust_newton": command.intent.collective_thrust_newton,
+            "body_torque_nm": command.intent.body_torque_nm,
+        },
+        "rotor_commands": [
+            {
+                "rotor_name": rotor_command.rotor_name,
+                "thrust_newton": rotor_command.thrust_newton,
+                "motor_speed_rad_s": rotor_command.motor_speed_rad_s,
+                "reaction_torque_nm": rotor_command.reaction_torque_nm,
+                "metadata": _serialize_mapping(rotor_command.metadata),
+            }
+            for rotor_command in command.rotor_commands
+        ],
+        "metadata": _serialize_mapping(command.metadata),
     }
 
 
@@ -107,22 +130,32 @@ class TrackingError:
         object.__setattr__(self, "yaw_rad", _coerce_float(self.yaw_rad, "yaw_rad"))
 
     @classmethod
+    def from_tracking_state_and_reference(
+        cls,
+        *,
+        tracking_state: VehicleState,
+        reference: TrajectoryReference,
+    ) -> "TrackingError":
+        _, _, current_yaw = euler_from_quaternion(tracking_state.orientation_wxyz)
+        position_error = tuple(
+            reference_value - state_value
+            for reference_value, state_value in zip(reference.position_m, tracking_state.position_m)
+        )
+        velocity_error = tuple(
+            reference_value - state_value
+            for reference_value, state_value in zip(reference.velocity_m_s, tracking_state.linear_velocity_m_s)
+        )
+        yaw_error = _wrap_angle(reference.yaw_rad - current_yaw)
+        return cls(position_m=position_error, velocity_m_s=velocity_error, yaw_rad=yaw_error)
+
+    @classmethod
     def from_state_and_reference(
         cls,
         *,
         state: VehicleState,
         reference: TrajectoryReference,
     ) -> "TrackingError":
-        _, _, current_yaw = euler_from_quaternion(state.orientation_wxyz)
-        position_error = tuple(
-            reference_value - state_value for reference_value, state_value in zip(reference.position_m, state.position_m)
-        )
-        velocity_error = tuple(
-            reference_value - state_value
-            for reference_value, state_value in zip(reference.velocity_m_s, state.linear_velocity_m_s)
-        )
-        yaw_error = _wrap_angle(reference.yaw_rad - current_yaw)
-        return cls(position_m=position_error, velocity_m_s=velocity_error, yaw_rad=yaw_error)
+        return cls.from_tracking_state_and_reference(tracking_state=state, reference=reference)
 
     @property
     def position_norm_m(self) -> float:
@@ -169,11 +202,32 @@ class SimulationStep:
             raise ValueError("error must be a TrackingError")
         if not isinstance(self.command, VehicleCommand):
             raise ValueError("command must be a VehicleCommand")
+        if not (
+            isclose(self.state.time_s, self.observation.true_state.time_s, rel_tol=1e-9, abs_tol=1e-9)
+            and isclose(self.state.time_s, self.observation.observed_state.time_s, rel_tol=1e-9, abs_tol=1e-9)
+        ):
+            raise ValueError("state and observation must share the same time")
+        if self.observation.true_state != self.state:
+            raise ValueError("observation.true_state must match the logged state")
+        if not isclose(self.time_s, self.state.time_s, rel_tol=1e-9, abs_tol=1e-9):
+            raise ValueError("time_s must match the sample state time")
         object.__setattr__(self, "events", tuple(self.events))
         for event in self.events:
             if not isinstance(event, TelemetryEvent):
                 raise ValueError("events must contain TelemetryEvent instances")
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
+
+    @property
+    def true_state(self) -> VehicleState:
+        return self.state
+
+    @property
+    def observed_state(self) -> VehicleState:
+        return self.observation.observed_state
+
+    @property
+    def tracking_state(self) -> VehicleState:
+        return self.state
 
     @property
     def position_error_norm_m(self) -> float:
@@ -187,10 +241,16 @@ class SimulationStep:
         record = {
             "index": self.index,
             "time_s": self.time_s,
+            "true_state": _serialize_state(self.true_state),
+            "observed_state": _serialize_state(self.observed_state),
+            "tracking_state": _serialize_state(self.tracking_state),
             "state": _serialize_state(self.state),
+            "state_time_s": self.state.time_s,
             "reference": _serialize_reference(self.reference),
             "error": self.error.to_dict(),
             "command": _serialize_command(self.command),
+            "command_time_s": self.metadata.get("command_time_s", self.time_s),
+            "tracking_state_source": "true_state",
             "events": [event.to_dict() for event in self.events],
             "metadata": _serialize_mapping(self.metadata),
         }
@@ -199,12 +259,21 @@ class SimulationStep:
             record.pop("events")
             record["observation"] = None
         else:
-            record["observation"] = _serialize_state(self.observation.state)
+            record["observation"] = _serialize_observation(self.observation)
+            record["observation_time_s"] = self.observation.observed_state.time_s
             if detail_level != "full":
                 record["observation"] = {
-                    "position_m": self.observation.state.position_m,
-                    "linear_velocity_m_s": self.observation.state.linear_velocity_m_s,
-                    "time_s": self.observation.state.time_s,
+                    "true_state": {
+                        "position_m": self.observation.true_state.position_m,
+                        "linear_velocity_m_s": self.observation.true_state.linear_velocity_m_s,
+                        "time_s": self.observation.true_state.time_s,
+                    },
+                    "observed_state": {
+                        "position_m": self.observation.observed_state.position_m,
+                        "linear_velocity_m_s": self.observation.observed_state.linear_velocity_m_s,
+                        "time_s": self.observation.observed_state.time_s,
+                    },
+                    "metadata": _serialize_mapping(self.observation.metadata),
                 }
         return record
 

@@ -9,7 +9,7 @@ from typing import Iterable, Mapping
 
 import numpy as np
 
-from .memory import SimulationHistory, SimulationStep
+from .memory import SimulationHistory, SimulationStep, _serialize_command
 
 
 _ALLOWED_DETAIL_LEVELS = {"compact", "standard", "full"}
@@ -91,6 +91,9 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
     row: dict[str, object] = {
         "step_index": step.index,
         "time_s": step.time_s,
+        "state_time_s": step.state.time_s,
+        "observation_time_s": step.observation.observed_state.time_s,
+        "command_time_s": step.metadata.get("command_time_s", step.time_s),
         "reference_time_s": step.reference.time_s,
         "reference_yaw_rad": step.reference.yaw_rad,
         "reference_valid_from_s": step.reference.valid_from_s,
@@ -100,8 +103,29 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
         "command_body_torque_x_nm": step.command.body_torque_nm[0],
         "command_body_torque_y_nm": step.command.body_torque_nm[1],
         "command_body_torque_z_nm": step.command.body_torque_nm[2],
+        "command_rotor_count": len(step.command.rotor_commands),
+        "command_rotor_commands_json": _json_dump(_serialize_command(step.command)["rotor_commands"]),
         "event_kinds_json": _json_dump([event.kind for event in step.events]),
+        "tracking_state_source": "true_state",
     }
+    row.update(_state_columns("true_state", {
+        "position_m": step.true_state.position_m,
+        "orientation_wxyz": step.true_state.orientation_wxyz,
+        "linear_velocity_m_s": step.true_state.linear_velocity_m_s,
+        "angular_velocity_rad_s": step.true_state.angular_velocity_rad_s,
+    }))
+    row.update(_state_columns("tracking_state", {
+        "position_m": step.tracking_state.position_m,
+        "orientation_wxyz": step.tracking_state.orientation_wxyz,
+        "linear_velocity_m_s": step.tracking_state.linear_velocity_m_s,
+        "angular_velocity_rad_s": step.tracking_state.angular_velocity_rad_s,
+    }))
+    row.update(_state_columns("observed_state", {
+        "position_m": step.observed_state.position_m,
+        "orientation_wxyz": step.observed_state.orientation_wxyz,
+        "linear_velocity_m_s": step.observed_state.linear_velocity_m_s,
+        "angular_velocity_rad_s": step.observed_state.angular_velocity_rad_s,
+    }))
     row.update(_state_columns("state", {
         "position_m": step.state.position_m,
         "orientation_wxyz": step.state.orientation_wxyz,
@@ -122,20 +146,40 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
     })
 
     if detail_level != "compact":
-        observation_state = step.observation.state
+        observation_state = step.observation.observed_state
         row.update(_state_columns("observation", {
             "position_m": observation_state.position_m,
             "orientation_wxyz": observation_state.orientation_wxyz,
             "linear_velocity_m_s": observation_state.linear_velocity_m_s,
             "angular_velocity_rad_s": observation_state.angular_velocity_rad_s,
         }))
-        row["observation_time_s"] = observation_state.time_s
         row["observation_metadata_json"] = _json_dump(dict(step.observation.metadata))
         row["reference_metadata_json"] = _json_dump(dict(step.reference.metadata))
         row["step_metadata_json"] = _json_dump(dict(step.metadata))
         row["events_json"] = _json_dump([event.to_dict() for event in step.events])
 
     if detail_level == "full":
+        row["true_state_json"] = _json_dump({
+            "position_m": step.true_state.position_m,
+            "orientation_wxyz": step.true_state.orientation_wxyz,
+            "linear_velocity_m_s": step.true_state.linear_velocity_m_s,
+            "angular_velocity_rad_s": step.true_state.angular_velocity_rad_s,
+            "time_s": step.true_state.time_s,
+        })
+        row["observed_state_json"] = _json_dump({
+            "position_m": step.observed_state.position_m,
+            "orientation_wxyz": step.observed_state.orientation_wxyz,
+            "linear_velocity_m_s": step.observed_state.linear_velocity_m_s,
+            "angular_velocity_rad_s": step.observed_state.angular_velocity_rad_s,
+            "time_s": step.observed_state.time_s,
+        })
+        row["tracking_state_json"] = _json_dump({
+            "position_m": step.tracking_state.position_m,
+            "orientation_wxyz": step.tracking_state.orientation_wxyz,
+            "linear_velocity_m_s": step.tracking_state.linear_velocity_m_s,
+            "angular_velocity_rad_s": step.tracking_state.angular_velocity_rad_s,
+            "time_s": step.tracking_state.time_s,
+        })
         row["state_json"] = _json_dump({
             "state": {
                 "position_m": step.state.position_m,
@@ -143,6 +187,23 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
                 "linear_velocity_m_s": step.state.linear_velocity_m_s,
                 "angular_velocity_rad_s": step.state.angular_velocity_rad_s,
                 "time_s": step.state.time_s,
+            },
+            "observation": {
+                "true_state": {
+                    "position_m": step.observation.true_state.position_m,
+                    "orientation_wxyz": step.observation.true_state.orientation_wxyz,
+                    "linear_velocity_m_s": step.observation.true_state.linear_velocity_m_s,
+                    "angular_velocity_rad_s": step.observation.true_state.angular_velocity_rad_s,
+                    "time_s": step.observation.true_state.time_s,
+                },
+                "observed_state": {
+                    "position_m": step.observation.observed_state.position_m,
+                    "orientation_wxyz": step.observation.observed_state.orientation_wxyz,
+                    "linear_velocity_m_s": step.observation.observed_state.linear_velocity_m_s,
+                    "angular_velocity_rad_s": step.observation.observed_state.angular_velocity_rad_s,
+                    "time_s": step.observation.observed_state.time_s,
+                },
+                "metadata": dict(step.observation.metadata),
             },
             "reference": {
                 "time_s": step.reference.time_s,
@@ -155,10 +216,7 @@ def _step_row(step: SimulationStep, *, detail_level: str) -> dict[str, object]:
                 "metadata": dict(step.reference.metadata),
             },
             "error": step.error.to_dict(),
-            "command": {
-                "collective_thrust_newton": step.command.collective_thrust_newton,
-                "body_torque_nm": step.command.body_torque_nm,
-            },
+            "command": _serialize_command(step.command),
             "events": [event.to_dict() for event in step.events],
         })
     return row
@@ -285,6 +343,9 @@ def export_history_to_numpy(
     if rows:
         arrays["step_index"] = np.asarray([row["step_index"] for row in rows], dtype=np.int64)
         arrays["time_s"] = np.asarray([row["time_s"] for row in rows], dtype=np.float64)
+        arrays["state_time_s"] = np.asarray([row["state_time_s"] for row in rows], dtype=np.float64)
+        arrays["observation_time_s"] = np.asarray([row["observation_time_s"] for row in rows], dtype=np.float64)
+        arrays["command_time_s"] = np.asarray([row["command_time_s"] for row in rows], dtype=np.float64)
         arrays["state_position_m"] = np.asarray(
             [[row["state_position_x_m"], row["state_position_y_m"], row["state_position_z_m"]] for row in rows],
             dtype=np.float64,
@@ -303,6 +364,120 @@ def export_history_to_numpy(
         arrays["state_angular_velocity_rad_s"] = np.asarray(
             [
                 [row["state_angular_velocity_x_rad_s"], row["state_angular_velocity_y_rad_s"], row["state_angular_velocity_z_rad_s"]]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["true_state_position_m"] = np.asarray(
+            [[row["true_state_position_x_m"], row["true_state_position_y_m"], row["true_state_position_z_m"]] for row in rows],
+            dtype=np.float64,
+        )
+        arrays["true_state_orientation_wxyz"] = np.asarray(
+            [
+                [
+                    row["true_state_orientation_w"],
+                    row["true_state_orientation_x"],
+                    row["true_state_orientation_y"],
+                    row["true_state_orientation_z"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["true_state_linear_velocity_m_s"] = np.asarray(
+            [
+                [
+                    row["true_state_linear_velocity_x_m_s"],
+                    row["true_state_linear_velocity_y_m_s"],
+                    row["true_state_linear_velocity_z_m_s"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["true_state_angular_velocity_rad_s"] = np.asarray(
+            [
+                [
+                    row["true_state_angular_velocity_x_rad_s"],
+                    row["true_state_angular_velocity_y_rad_s"],
+                    row["true_state_angular_velocity_z_rad_s"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["tracking_state_position_m"] = np.asarray(
+            [[row["tracking_state_position_x_m"], row["tracking_state_position_y_m"], row["tracking_state_position_z_m"]] for row in rows],
+            dtype=np.float64,
+        )
+        arrays["tracking_state_orientation_wxyz"] = np.asarray(
+            [
+                [
+                    row["tracking_state_orientation_w"],
+                    row["tracking_state_orientation_x"],
+                    row["tracking_state_orientation_y"],
+                    row["tracking_state_orientation_z"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["tracking_state_linear_velocity_m_s"] = np.asarray(
+            [
+                [
+                    row["tracking_state_linear_velocity_x_m_s"],
+                    row["tracking_state_linear_velocity_y_m_s"],
+                    row["tracking_state_linear_velocity_z_m_s"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["tracking_state_angular_velocity_rad_s"] = np.asarray(
+            [
+                [
+                    row["tracking_state_angular_velocity_x_rad_s"],
+                    row["tracking_state_angular_velocity_y_rad_s"],
+                    row["tracking_state_angular_velocity_z_rad_s"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["observed_state_position_m"] = np.asarray(
+            [[row["observed_state_position_x_m"], row["observed_state_position_y_m"], row["observed_state_position_z_m"]] for row in rows],
+            dtype=np.float64,
+        )
+        arrays["observed_state_orientation_wxyz"] = np.asarray(
+            [
+                [
+                    row["observed_state_orientation_w"],
+                    row["observed_state_orientation_x"],
+                    row["observed_state_orientation_y"],
+                    row["observed_state_orientation_z"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["observed_state_linear_velocity_m_s"] = np.asarray(
+            [
+                [
+                    row["observed_state_linear_velocity_x_m_s"],
+                    row["observed_state_linear_velocity_y_m_s"],
+                    row["observed_state_linear_velocity_z_m_s"],
+                ]
+                for row in rows
+            ],
+            dtype=np.float64,
+        )
+        arrays["observed_state_angular_velocity_rad_s"] = np.asarray(
+            [
+                [
+                    row["observed_state_angular_velocity_x_rad_s"],
+                    row["observed_state_angular_velocity_y_rad_s"],
+                    row["observed_state_angular_velocity_z_rad_s"],
+                ]
                 for row in rows
             ],
             dtype=np.float64,
@@ -339,6 +514,8 @@ def export_history_to_numpy(
             ],
             dtype=np.float64,
         )
+        arrays["command_rotor_count"] = np.asarray([row["command_rotor_count"] for row in rows], dtype=np.int64)
+        arrays["command_rotor_commands_json"] = _string_array(row["command_rotor_commands_json"] for row in rows)
         arrays["event_kinds_json"] = _string_array(row["event_kinds_json"] for row in rows)
         if resolved_detail != "compact":
             arrays["reference_metadata_json"] = _string_array(row["reference_metadata_json"] for row in rows)
@@ -377,6 +554,9 @@ def export_history_to_numpy(
             arrays["observation_time_s"] = np.asarray([row["observation_time_s"] for row in rows], dtype=np.float64)
             arrays["observation_metadata_json"] = _string_array(row["observation_metadata_json"] for row in rows)
         if resolved_detail == "full":
+            arrays["true_state_json"] = _string_array(row["true_state_json"] for row in rows)
+            arrays["observed_state_json"] = _string_array(row["observed_state_json"] for row in rows)
+            arrays["tracking_state_json"] = _string_array(row["tracking_state_json"] for row in rows)
             arrays["state_json"] = _string_array(row["state_json"] for row in rows)
     np.savez_compressed(output_path, **arrays)
     return output_path

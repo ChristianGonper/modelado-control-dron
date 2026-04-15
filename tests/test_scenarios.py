@@ -50,6 +50,18 @@ def test_scenario_validation_reports_clear_errors() -> None:
         ScenarioTimeConfig(duration_s=0.0, dt_s=0.02)
 
 
+def test_scenario_time_config_supports_separate_rates() -> None:
+    time = ScenarioTimeConfig(duration_s=0.12, physics_dt_s=0.02, control_dt_s=0.04, telemetry_dt_s=0.06)
+
+    assert time.dt_s == pytest.approx(0.02)
+    assert time.physics_dt_s == pytest.approx(0.02)
+    assert time.control_dt_s == pytest.approx(0.04)
+    assert time.telemetry_dt_s == pytest.approx(0.06)
+
+    with pytest.raises(ValueError, match="integer multiple"):
+        ScenarioTimeConfig(duration_s=0.12, physics_dt_s=0.02, control_dt_s=0.03)
+
+
 def test_telemetry_detail_level_is_validated() -> None:
     with pytest.raises(ValueError, match="detail_level"):
         ScenarioTelemetryConfig(detail_level="verbose")
@@ -101,6 +113,7 @@ def test_scenario_disturbances_build_aerodynamic_environment() -> None:
             induced_hover_enabled=True,
             wind_velocity_m_s=(1.0, -0.5, 0.0),
             wind_gust_std_m_s=(0.1, 0.0, 0.0),
+            wind_gust_time_constant_s=0.3,
             parasitic_drag_area_m2=0.12,
             induced_hover_loss_ratio=0.2,
         ),
@@ -111,5 +124,11 @@ def test_scenario_disturbances_build_aerodynamic_environment() -> None:
     assert environment.parasitic_drag_enabled is True
     assert environment.induced_hover_enabled is True
     assert environment.wind_velocity_m_s == (1.0, -0.5, 0.0)
+    assert environment.wind_gust_time_constant_s == pytest.approx(0.3)
     assert environment.parasitic_drag_area_m2 == pytest.approx(0.12)
     assert environment.induced_hover_loss_ratio == pytest.approx(0.2)
+
+
+def test_disturbance_wind_correlation_time_is_validated() -> None:
+    with pytest.raises(ValueError, match="positive"):
+        ScenarioDisturbanceConfig(wind_gust_time_constant_s=0.0)

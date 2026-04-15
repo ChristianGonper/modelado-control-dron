@@ -32,6 +32,7 @@ def _step_durations(history: SimulationHistory) -> list[float]:
 class TrackingMetrics:
     sample_count: int
     duration_s: float
+    tracking_state_source: str
     position_rmse_m: float
     velocity_rmse_m_s: float
     yaw_rmse_rad: float
@@ -49,6 +50,7 @@ class TrackingMetrics:
         return {
             "sample_count": self.sample_count,
             "duration_s": self.duration_s,
+            "tracking_state_source": self.tracking_state_source,
             "position_rmse_m": self.position_rmse_m,
             "velocity_rmse_m_s": self.velocity_rmse_m_s,
             "yaw_rmse_rad": self.yaw_rmse_rad,
@@ -68,6 +70,7 @@ class TrackingMetrics:
 class MetricComparison:
     sample_count: int
     duration_s: float
+    tracking_state_source: str
     position_rmse_delta_m: float
     velocity_rmse_delta_m_s: float
     yaw_rmse_delta_rad: float
@@ -80,6 +83,7 @@ class MetricComparison:
         return {
             "sample_count": self.sample_count,
             "duration_s": self.duration_s,
+            "tracking_state_source": self.tracking_state_source,
             "position_rmse_delta_m": self.position_rmse_delta_m,
             "velocity_rmse_delta_m_s": self.velocity_rmse_delta_m_s,
             "yaw_rmse_delta_rad": self.yaw_rmse_delta_rad,
@@ -114,6 +118,7 @@ def compute_tracking_metrics(history: SimulationHistory) -> TrackingMetrics:
     return TrackingMetrics(
         sample_count=len(history.steps),
         duration_s=history.final_time_s - history.initial_state.time_s,
+        tracking_state_source="true_state",
         position_rmse_m=_rms(position_norms),
         velocity_rmse_m_s=_rms(velocity_norms),
         yaw_rmse_rad=_rms(yaw_errors),
@@ -132,9 +137,12 @@ def compute_tracking_metrics(history: SimulationHistory) -> TrackingMetrics:
 def compare_tracking_metrics(baseline: TrackingMetrics, candidate: TrackingMetrics) -> MetricComparison:
     if baseline.sample_count != candidate.sample_count or not isclose(baseline.duration_s, candidate.duration_s, rel_tol=1e-9, abs_tol=1e-12):
         raise ValueError("metrics can only be compared for homogeneous executions")
+    if baseline.tracking_state_source != candidate.tracking_state_source:
+        raise ValueError("metrics can only be compared when they use the same tracking state source")
     return MetricComparison(
         sample_count=baseline.sample_count,
         duration_s=baseline.duration_s,
+        tracking_state_source=baseline.tracking_state_source,
         position_rmse_delta_m=candidate.position_rmse_m - baseline.position_rmse_m,
         velocity_rmse_delta_m_s=candidate.velocity_rmse_m_s - baseline.velocity_rmse_m_s,
         yaw_rmse_delta_rad=candidate.yaw_rmse_rad - baseline.yaw_rmse_rad,

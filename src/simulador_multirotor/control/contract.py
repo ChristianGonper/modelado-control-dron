@@ -7,7 +7,7 @@ from math import isfinite
 from types import MappingProxyType
 from typing import Callable, Mapping, Protocol, runtime_checkable
 
-from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleObservation
+from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleIntent, VehicleObservation
 
 
 def _coerce_float(value: object, field_name: str) -> float:
@@ -103,6 +103,8 @@ class NullController:
         reference: TrajectoryReference,
     ) -> VehicleCommand:
         return VehicleCommand(
-            collective_thrust_newton=self.collective_thrust_newton,
-            body_torque_nm=self.body_torque_nm,
+            intent=VehicleIntent(
+                collective_thrust_newton=self.collective_thrust_newton,
+                body_torque_nm=self.body_torque_nm,
+            ),
         )

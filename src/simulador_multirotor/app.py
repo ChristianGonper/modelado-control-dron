@@ -8,20 +8,24 @@ from typing import Sequence
 
 from .metrics import compute_tracking_metrics
 from .runner import SimulationRunner
-from .scenarios import build_minimal_scenario
+from .scenarios import build_minimal_scenario, load_simulation_scenario
 from .telemetry import export_history_to_json
 from .visualization import load_telemetry_archive, render_analysis_outputs
 
 
-def build_minimal_demo(*, seed: int | None = None) -> dict[str, object]:
-    """Run the minimum validated demo and return its history."""
-    scenario = build_minimal_scenario(seed=seed)
+def build_scenario_demo(scenario) -> dict[str, object]:
+    """Run a scenario and return its history."""
     history = SimulationRunner().run(scenario)
     return {"scenario": scenario, "history": history}
 
 
-def _print_demo_summary(*, history, scenario) -> None:
-    print("simulador-multirotor minimal run")
+def build_minimal_demo(*, seed: int | None = None) -> dict[str, object]:
+    """Run the minimum validated demo and return its history."""
+    return build_scenario_demo(build_minimal_scenario(seed=seed))
+
+
+def _print_run_summary(*, history, scenario) -> None:
+    print("simulador-multirotor run")
     metrics = compute_tracking_metrics(history)
     print(f"steps: {len(history.steps)}")
     print(f"final_time_s: {history.final_time_s:.3f}")
@@ -33,17 +37,21 @@ def _print_demo_summary(*, history, scenario) -> None:
     print(f"final_state: {history.final_state}")
 
 
-def run_minimal_demo(*, seed: int | None = None) -> int:
-    demo = build_minimal_demo(seed=seed)
-    _print_demo_summary(history=demo["history"], scenario=demo["scenario"])
+def run_scenario_demo(scenario) -> int:
+    demo = build_scenario_demo(scenario)
+    _print_run_summary(history=demo["history"], scenario=demo["scenario"])
     return 0
 
 
-def run_minimal_analysis(*, seed: int | None = None, analysis_dir: str | Path) -> int:
-    demo = build_minimal_demo(seed=seed)
+def run_minimal_demo(*, seed: int | None = None) -> int:
+    return run_scenario_demo(build_minimal_scenario(seed=seed))
+
+
+def run_scenario_analysis(*, scenario, analysis_dir: str | Path) -> int:
+    demo = build_scenario_demo(scenario)
     history = demo["history"]
     scenario = demo["scenario"]
-    _print_demo_summary(history=history, scenario=scenario)
+    _print_run_summary(history=history, scenario=scenario)
     output_dir = Path(analysis_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     telemetry_path = export_history_to_json(
@@ -59,6 +67,10 @@ def run_minimal_analysis(*, seed: int | None = None, analysis_dir: str | Path) -
     print(f"analysis_tracking_errors: {bundle.tracking_errors_path}")
     print(f"analysis_trajectory_3d: {bundle.trajectory_3d_path}")
     return 0
+
+
+def run_minimal_analysis(*, seed: int | None = None, analysis_dir: str | Path) -> int:
+    return run_scenario_analysis(scenario=build_minimal_scenario(seed=seed), analysis_dir=analysis_dir)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -78,6 +90,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Seed the nominal scenario run.",
     )
     parser.add_argument(
+        "--scenario",
+        type=Path,
+        default=None,
+        help="Load and execute an external scenario JSON artifact.",
+    )
+    parser.add_argument(
         "--analysis-dir",
         type=Path,
         default=None,
@@ -85,5 +103,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     if args.analysis_dir is not None:
-        return run_minimal_analysis(seed=args.seed, analysis_dir=args.analysis_dir)
+        scenario = load_simulation_scenario(args.scenario) if args.scenario is not None else build_minimal_scenario(seed=args.seed)
+        return run_scenario_analysis(scenario=scenario, analysis_dir=args.analysis_dir)
+    if args.scenario is not None:
+        return run_scenario_demo(load_simulation_scenario(args.scenario))
     return run_minimal_demo(seed=args.seed)

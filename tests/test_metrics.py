@@ -64,6 +64,7 @@ def test_metrics_compute_on_real_execution() -> None:
 
     assert metrics.sample_count == len(history.steps)
     assert metrics.duration_s == pytest.approx(history.final_time_s - history.initial_state.time_s)
+    assert metrics.tracking_state_source == "true_state"
     assert metrics.position_rmse_m >= 0.0
     assert metrics.mean_collective_thrust_newton > 0.0
 
@@ -77,5 +78,6 @@ def test_metrics_compare_homogeneous_synthetic_histories() -> None:
     comparison = compare_tracking_metrics(baseline_metrics, candidate_metrics)
 
     assert comparison.sample_count == 2
+    assert comparison.tracking_state_source == "true_state"
     assert comparison.position_rmse_delta_m > 0.0
     assert comparison.mean_collective_thrust_delta_newton > 0.0
