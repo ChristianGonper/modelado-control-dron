@@ -15,6 +15,21 @@ from .mlp import (
     load_mlp_controller,
     train_mlp_checkpoint,
 )
+from .recurrent import (
+    RecurrentCheckpoint,
+    RecurrentController,
+    RecurrentTrainingConfig,
+    RecurrentTrainingHistoryEntry,
+    RecurrentTrainingResult,
+    dump_checkpoint_summary as dump_recurrent_checkpoint_summary,
+    load_gru_controller,
+    load_lstm_controller,
+    load_recurrent_checkpoint,
+    load_recurrent_controller,
+    train_gru_checkpoint,
+    train_lstm_checkpoint,
+    train_recurrent_checkpoint,
+)
 
 __all__ = [
     "ControllerAdapter",
@@ -31,8 +46,21 @@ __all__ = [
     "MLPTrainingResult",
     "NullController",
     "PositionLoopController",
+    "RecurrentCheckpoint",
+    "RecurrentController",
+    "RecurrentTrainingConfig",
+    "RecurrentTrainingHistoryEntry",
+    "RecurrentTrainingResult",
     "dump_checkpoint_summary",
+    "dump_recurrent_checkpoint_summary",
     "load_mlp_checkpoint",
     "load_mlp_controller",
+    "load_gru_controller",
+    "load_lstm_controller",
+    "load_recurrent_checkpoint",
+    "load_recurrent_controller",
     "train_mlp_checkpoint",
+    "train_gru_checkpoint",
+    "train_lstm_checkpoint",
+    "train_recurrent_checkpoint",
 ]
