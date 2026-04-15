@@ -12,6 +12,8 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
+from ..core.contracts import TrajectoryReference, VehicleCommand, VehicleObservation, VehicleState
+
 
 def _coerce_float(value: object, field_name: str) -> float:
     try:
@@ -57,6 +59,36 @@ def _vector_from_flat(sample: Mapping[str, object], keys: Sequence[str], fallbac
     raise KeyError(keys[0])
 
 
+def _vehicle_state(
+    position_m: Sequence[object],
+    orientation_wxyz: Sequence[object],
+    linear_velocity_m_s: Sequence[object],
+    angular_velocity_rad_s: Sequence[object],
+    *,
+    time_s: object,
+) -> VehicleState:
+    return VehicleState(
+        position_m=position_m,
+        orientation_wxyz=orientation_wxyz,
+        linear_velocity_m_s=linear_velocity_m_s,
+        angular_velocity_rad_s=angular_velocity_rad_s,
+        time_s=time_s,
+    )
+
+
+def _reference_acceleration_from_payload(payload: object) -> tuple[float, float, float] | None:
+    state_payload = _json_load(payload, None)
+    if not isinstance(state_payload, Mapping):
+        return None
+    reference_payload = state_payload.get("reference")
+    if not isinstance(reference_payload, Mapping):
+        return None
+    acceleration = reference_payload.get("acceleration_m_s2")
+    if acceleration is None:
+        return None
+    return _coerce_vector(acceleration, length=3, field_name="reference_acceleration_m_s2")
+
+
 @dataclass(frozen=True, slots=True)
 class TelemetrySample:
     step_index: int
@@ -64,15 +96,23 @@ class TelemetrySample:
     state_position_m: tuple[float, float, float]
     state_orientation_wxyz: tuple[float, float, float, float]
     state_linear_velocity_m_s: tuple[float, float, float]
+    state_angular_velocity_rad_s: tuple[float, float, float]
+    observed_state_position_m: tuple[float, float, float]
+    observed_state_orientation_wxyz: tuple[float, float, float, float]
+    observed_state_linear_velocity_m_s: tuple[float, float, float]
+    observed_state_angular_velocity_rad_s: tuple[float, float, float]
     reference_position_m: tuple[float, float, float]
     reference_velocity_m_s: tuple[float, float, float]
+    reference_yaw_rad: float
     error_position_m: tuple[float, float, float]
     error_velocity_m_s: tuple[float, float, float]
     error_yaw_rad: float
     command_collective_thrust_newton: float
     command_body_torque_nm: tuple[float, float, float]
     event_kinds: tuple[str, ...] = ()
+    reference_valid_from_s: float | None = None
     reference_valid_until_s: float | None = None
+    reference_acceleration_m_s2: tuple[float, float, float] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "step_index", int(self.step_index))
@@ -80,21 +120,81 @@ class TelemetrySample:
         object.__setattr__(self, "state_position_m", _coerce_vector(self.state_position_m, length=3, field_name="state_position_m"))
         object.__setattr__(self, "state_orientation_wxyz", _coerce_vector(self.state_orientation_wxyz, length=4, field_name="state_orientation_wxyz"))
         object.__setattr__(self, "state_linear_velocity_m_s", _coerce_vector(self.state_linear_velocity_m_s, length=3, field_name="state_linear_velocity_m_s"))
+        object.__setattr__(self, "state_angular_velocity_rad_s", _coerce_vector(self.state_angular_velocity_rad_s, length=3, field_name="state_angular_velocity_rad_s"))
+        object.__setattr__(self, "observed_state_position_m", _coerce_vector(self.observed_state_position_m, length=3, field_name="observed_state_position_m"))
+        object.__setattr__(self, "observed_state_orientation_wxyz", _coerce_vector(self.observed_state_orientation_wxyz, length=4, field_name="observed_state_orientation_wxyz"))
+        object.__setattr__(self, "observed_state_linear_velocity_m_s", _coerce_vector(self.observed_state_linear_velocity_m_s, length=3, field_name="observed_state_linear_velocity_m_s"))
+        object.__setattr__(self, "observed_state_angular_velocity_rad_s", _coerce_vector(self.observed_state_angular_velocity_rad_s, length=3, field_name="observed_state_angular_velocity_rad_s"))
         object.__setattr__(self, "reference_position_m", _coerce_vector(self.reference_position_m, length=3, field_name="reference_position_m"))
         object.__setattr__(self, "reference_velocity_m_s", _coerce_vector(self.reference_velocity_m_s, length=3, field_name="reference_velocity_m_s"))
+        object.__setattr__(self, "reference_yaw_rad", _coerce_float(self.reference_yaw_rad, "reference_yaw_rad"))
+        object.__setattr__(self, "reference_valid_from_s", _coerce_optional_float(self.reference_valid_from_s, "reference_valid_from_s"))
+        object.__setattr__(self, "reference_valid_until_s", _coerce_optional_float(self.reference_valid_until_s, "reference_valid_until_s"))
+        if self.reference_acceleration_m_s2 is not None:
+            object.__setattr__(
+                self,
+                "reference_acceleration_m_s2",
+                _coerce_vector(self.reference_acceleration_m_s2, length=3, field_name="reference_acceleration_m_s2"),
+            )
         object.__setattr__(self, "error_position_m", _coerce_vector(self.error_position_m, length=3, field_name="error_position_m"))
         object.__setattr__(self, "error_velocity_m_s", _coerce_vector(self.error_velocity_m_s, length=3, field_name="error_velocity_m_s"))
         object.__setattr__(self, "error_yaw_rad", _coerce_float(self.error_yaw_rad, "error_yaw_rad"))
         object.__setattr__(self, "command_collective_thrust_newton", _coerce_float(self.command_collective_thrust_newton, "command_collective_thrust_newton"))
         object.__setattr__(self, "command_body_torque_nm", _coerce_vector(self.command_body_torque_nm, length=3, field_name="command_body_torque_nm"))
         object.__setattr__(self, "event_kinds", tuple(str(kind).strip() for kind in self.event_kinds if str(kind).strip()))
-        object.__setattr__(self, "reference_valid_until_s", _coerce_optional_float(self.reference_valid_until_s, "reference_valid_until_s"))
 
     @property
     def body_z_axis(self) -> tuple[float, float, float]:
         from ..core.attitude import rotate_vector_by_quaternion
 
         return rotate_vector_by_quaternion(self.state_orientation_wxyz, (0.0, 0.0, 1.0))
+
+    @property
+    def state(self) -> VehicleState:
+        return _vehicle_state(
+            self.state_position_m,
+            self.state_orientation_wxyz,
+            self.state_linear_velocity_m_s,
+            self.state_angular_velocity_rad_s,
+            time_s=self.time_s,
+        )
+
+    @property
+    def observed_state(self) -> VehicleState:
+        return _vehicle_state(
+            self.observed_state_position_m,
+            self.observed_state_orientation_wxyz,
+            self.observed_state_linear_velocity_m_s,
+            self.observed_state_angular_velocity_rad_s,
+            time_s=self.time_s,
+        )
+
+    @property
+    def tracking_state(self) -> VehicleState:
+        return self.state
+
+    @property
+    def reference(self) -> TrajectoryReference:
+        return TrajectoryReference(
+            time_s=self.time_s,
+            position_m=self.reference_position_m,
+            velocity_m_s=self.reference_velocity_m_s,
+            yaw_rad=self.reference_yaw_rad,
+            valid_from_s=self.reference_valid_from_s or 0.0,
+            valid_until_s=self.reference_valid_until_s,
+            acceleration_m_s2=self.reference_acceleration_m_s2,
+        )
+
+    @property
+    def command(self) -> VehicleCommand:
+        return VehicleCommand(
+            collective_thrust_newton=self.command_collective_thrust_newton,
+            body_torque_nm=self.command_body_torque_nm,
+        )
+
+    @property
+    def observation(self) -> VehicleObservation:
+        return VehicleObservation(true_state=self.state, observed_state=self.observed_state)
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,8 +265,15 @@ def _sample_from_mapping(sample: Mapping[str, object]) -> TelemetrySample:
         state_position_m=_vector_from_flat(sample, ("state_position_x_m", "state_position_y_m", "state_position_z_m"), "state_position_m"),
         state_orientation_wxyz=_vector_from_flat(sample, ("state_orientation_w", "state_orientation_x", "state_orientation_y", "state_orientation_z"), "state_orientation_wxyz"),
         state_linear_velocity_m_s=_vector_from_flat(sample, ("state_linear_velocity_x_m_s", "state_linear_velocity_y_m_s", "state_linear_velocity_z_m_s"), "state_linear_velocity_m_s"),
+        state_angular_velocity_rad_s=_vector_from_flat(sample, ("state_angular_velocity_x_rad_s", "state_angular_velocity_y_rad_s", "state_angular_velocity_z_rad_s"), "state_angular_velocity_rad_s"),
+        observed_state_position_m=_vector_from_flat(sample, ("observed_state_position_x_m", "observed_state_position_y_m", "observed_state_position_z_m"), "observed_state_position_m"),
+        observed_state_orientation_wxyz=_vector_from_flat(sample, ("observed_state_orientation_w", "observed_state_orientation_x", "observed_state_orientation_y", "observed_state_orientation_z"), "observed_state_orientation_wxyz"),
+        observed_state_linear_velocity_m_s=_vector_from_flat(sample, ("observed_state_linear_velocity_x_m_s", "observed_state_linear_velocity_y_m_s", "observed_state_linear_velocity_z_m_s"), "observed_state_linear_velocity_m_s"),
+        observed_state_angular_velocity_rad_s=_vector_from_flat(sample, ("observed_state_angular_velocity_x_rad_s", "observed_state_angular_velocity_y_rad_s", "observed_state_angular_velocity_z_rad_s"), "observed_state_angular_velocity_rad_s"),
         reference_position_m=_vector_from_flat(sample, ("reference_position_x_m", "reference_position_y_m", "reference_position_z_m"), "reference_position_m"),
         reference_velocity_m_s=_vector_from_flat(sample, ("reference_velocity_x_m_s", "reference_velocity_y_m_s", "reference_velocity_z_m_s"), "reference_velocity_m_s"),
+        reference_yaw_rad=sample["reference_yaw_rad"],
+        reference_valid_from_s=sample.get("reference_valid_from_s"),
         error_position_m=_vector_from_flat(sample, ("error_position_x_m", "error_position_y_m", "error_position_z_m"), "error_position_m"),
         error_velocity_m_s=_vector_from_flat(sample, ("error_velocity_x_m_s", "error_velocity_y_m_s", "error_velocity_z_m_s"), "error_velocity_m_s"),
         error_yaw_rad=sample["error_yaw_rad"],
@@ -174,6 +281,7 @@ def _sample_from_mapping(sample: Mapping[str, object]) -> TelemetrySample:
         command_body_torque_nm=_vector_from_flat(sample, ("command_body_torque_x_nm", "command_body_torque_y_nm", "command_body_torque_z_nm"), "command_body_torque_nm"),
         event_kinds=tuple(_json_load(sample.get("event_kinds_json", []), [])),
         reference_valid_until_s=sample.get("reference_valid_until_s"),
+        reference_acceleration_m_s2=_reference_acceleration_from_payload(sample.get("state_json")),
     )
 
 
@@ -184,8 +292,22 @@ def _sample_from_npz(archive: np.lib.npyio.NpzFile, index: int) -> TelemetrySamp
         state_position_m=tuple(float(value) for value in archive["state_position_m"][index]),
         state_orientation_wxyz=tuple(float(value) for value in archive["state_orientation_wxyz"][index]),
         state_linear_velocity_m_s=tuple(float(value) for value in archive["state_linear_velocity_m_s"][index]),
+        state_angular_velocity_rad_s=tuple(float(value) for value in archive["state_angular_velocity_rad_s"][index]),
+        observed_state_position_m=tuple(float(value) for value in archive["observed_state_position_m"][index]),
+        observed_state_orientation_wxyz=tuple(float(value) for value in archive["observed_state_orientation_wxyz"][index]),
+        observed_state_linear_velocity_m_s=tuple(float(value) for value in archive["observed_state_linear_velocity_m_s"][index]),
+        observed_state_angular_velocity_rad_s=tuple(float(value) for value in archive["observed_state_angular_velocity_rad_s"][index]),
         reference_position_m=tuple(float(value) for value in archive["reference_position_m"][index]),
         reference_velocity_m_s=tuple(float(value) for value in archive["reference_velocity_m_s"][index]),
+        reference_yaw_rad=float(archive["reference_yaw_rad"][index]),
+        reference_valid_from_s=float(archive["reference_valid_from_s"][index]) if "reference_valid_from_s" in archive else None,
+        reference_valid_until_s=_coerce_optional_float(archive["reference_valid_until_s"][index], "reference_valid_until_s")
+        if "reference_valid_until_s" in archive
+        else None,
+        reference_acceleration_m_s2=
+        tuple(float(value) for value in archive["reference_acceleration_m_s2"][index])
+        if "reference_acceleration_m_s2" in archive
+        else _reference_acceleration_from_payload(archive["state_json"][index]) if "state_json" in archive else None,
         error_position_m=tuple(float(value) for value in archive["error_position_m"][index]),
         error_velocity_m_s=tuple(float(value) for value in archive["error_velocity_m_s"][index]),
         error_yaw_rad=float(archive["error_yaw_rad"][index]),
@@ -202,8 +324,15 @@ def _sample_from_csv_row(row: Mapping[str, object]) -> TelemetrySample:
         state_position_m=_vector_from_flat(row, ("state_position_x_m", "state_position_y_m", "state_position_z_m"), "state_position_m"),
         state_orientation_wxyz=_vector_from_flat(row, ("state_orientation_w", "state_orientation_x", "state_orientation_y", "state_orientation_z"), "state_orientation_wxyz"),
         state_linear_velocity_m_s=_vector_from_flat(row, ("state_linear_velocity_x_m_s", "state_linear_velocity_y_m_s", "state_linear_velocity_z_m_s"), "state_linear_velocity_m_s"),
+        state_angular_velocity_rad_s=_vector_from_flat(row, ("state_angular_velocity_x_rad_s", "state_angular_velocity_y_rad_s", "state_angular_velocity_z_rad_s"), "state_angular_velocity_rad_s"),
+        observed_state_position_m=_vector_from_flat(row, ("observed_state_position_x_m", "observed_state_position_y_m", "observed_state_position_z_m"), "observed_state_position_m"),
+        observed_state_orientation_wxyz=_vector_from_flat(row, ("observed_state_orientation_w", "observed_state_orientation_x", "observed_state_orientation_y", "observed_state_orientation_z"), "observed_state_orientation_wxyz"),
+        observed_state_linear_velocity_m_s=_vector_from_flat(row, ("observed_state_linear_velocity_x_m_s", "observed_state_linear_velocity_y_m_s", "observed_state_linear_velocity_z_m_s"), "observed_state_linear_velocity_m_s"),
+        observed_state_angular_velocity_rad_s=_vector_from_flat(row, ("observed_state_angular_velocity_x_rad_s", "observed_state_angular_velocity_y_rad_s", "observed_state_angular_velocity_z_rad_s"), "observed_state_angular_velocity_rad_s"),
         reference_position_m=_vector_from_flat(row, ("reference_position_x_m", "reference_position_y_m", "reference_position_z_m"), "reference_position_m"),
         reference_velocity_m_s=_vector_from_flat(row, ("reference_velocity_x_m_s", "reference_velocity_y_m_s", "reference_velocity_z_m_s"), "reference_velocity_m_s"),
+        reference_yaw_rad=row["reference_yaw_rad"],
+        reference_valid_from_s=row.get("reference_valid_from_s"),
         error_position_m=_vector_from_flat(row, ("error_position_x_m", "error_position_y_m", "error_position_z_m"), "error_position_m"),
         error_velocity_m_s=_vector_from_flat(row, ("error_velocity_x_m_s", "error_velocity_y_m_s", "error_velocity_z_m_s"), "error_velocity_m_s"),
         error_yaw_rad=row["error_yaw_rad"],
@@ -211,6 +340,7 @@ def _sample_from_csv_row(row: Mapping[str, object]) -> TelemetrySample:
         command_body_torque_nm=_vector_from_flat(row, ("command_body_torque_x_nm", "command_body_torque_y_nm", "command_body_torque_z_nm"), "command_body_torque_nm"),
         event_kinds=tuple(_json_load(row.get("event_kinds_json", "[]"), [])),
         reference_valid_until_s=row.get("reference_valid_until_s"),
+        reference_acceleration_m_s2=_reference_acceleration_from_payload(row.get("state_json")),
     )
 
 
