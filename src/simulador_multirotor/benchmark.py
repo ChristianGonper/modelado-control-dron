@@ -123,6 +123,7 @@ class NeuralBenchmarkControllerResult:
     controller_kind: str
     controller_source: str
     metrics: dict[str, object]
+    trace: dict[str, object]
     cpu_inference_time_s_total: float
     cpu_inference_time_s_mean: float
     compute_action_count: int
@@ -132,6 +133,7 @@ class NeuralBenchmarkControllerResult:
             "controller_kind": self.controller_kind,
             "controller_source": self.controller_source,
             "metrics": self.metrics,
+            "trace": self.trace,
             "cpu_inference_time_s_total": self.cpu_inference_time_s_total,
             "cpu_inference_time_s_mean": self.cpu_inference_time_s_mean,
             "compute_action_count": self.compute_action_count,
@@ -187,10 +189,21 @@ def _controller_result_from_history(
 ) -> NeuralBenchmarkControllerResult:
     step_count = len(history.steps)
     cpu_inference_time_s_mean = 0.0 if controller.compute_action_count == 0 else controller.cpu_inference_time_s_total / controller.compute_action_count
+    trace = {
+        "time_s": [step.time_s for step in history.steps],
+        "state_position_m": [step.state.position_m for step in history.steps],
+        "reference_position_m": [step.reference.position_m for step in history.steps],
+        "position_error_norm_m": [step.position_error_norm_m for step in history.steps],
+        "velocity_error_norm_m_s": [step.velocity_error_norm_m_s for step in history.steps],
+        "yaw_error_rad": [step.error.yaw_rad for step in history.steps],
+        "collective_thrust_newton": [step.command.collective_thrust_newton for step in history.steps],
+        "body_torque_nm": [step.command.body_torque_nm for step in history.steps],
+    }
     return NeuralBenchmarkControllerResult(
         controller_kind=controller.kind,
         controller_source=controller.source,
         metrics=metrics.to_dict(),
+        trace=trace,
         cpu_inference_time_s_total=controller.cpu_inference_time_s_total,
         cpu_inference_time_s_mean=cpu_inference_time_s_mean,
         compute_action_count=controller.compute_action_count if controller.compute_action_count else step_count,

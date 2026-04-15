@@ -8,6 +8,7 @@ def test_package_imports_are_available() -> None:
     import simulador_multirotor.core
     import simulador_multirotor.dynamics
     import simulador_multirotor.metrics
+    import simulador_multirotor.reporting
     import simulador_multirotor.scenarios
     import simulador_multirotor.telemetry
     import simulador_multirotor.trajectories
@@ -21,4 +22,5 @@ def test_package_imports_are_available() -> None:
     assert simulador_multirotor.dynamics.RigidBody6DOFDynamics is not None
     assert simulador_multirotor.scenarios.SimulationScenario is not None
     assert simulador_multirotor.metrics.TrackingMetrics is not None
+    assert simulador_multirotor.reporting.generate_phase5_report is not None
     assert simulador_multirotor.visualization.TelemetryArchive is not None
