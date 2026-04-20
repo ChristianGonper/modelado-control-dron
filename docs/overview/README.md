@@ -27,6 +27,8 @@ It explains scope, reading order, documentation boundaries, and how the rest of 
 - [Documentation Map](/Users/chris/Documents/Universidad/TFG/docs/documentation_map.md)
 - [Layered System View](/Users/chris/Documents/Universidad/TFG/docs/system/layered-system-view.md)
 - [System Blocks And Responsibilities](/Users/chris/Documents/Universidad/TFG/docs/system/system-blocks.md)
+- [Main Simulator Interfaces](/Users/chris/Documents/Universidad/TFG/docs/system/system-interfaces.md)
+- [Technical Rationale Map](/Users/chris/Documents/Universidad/TFG/docs/validation/technical-rationale-map.md)
 - [PRD: Documentacion Integral Del TFG](/Users/chris/Documents/Universidad/TFG/docs/PRD_documentacion_integral_tfg.md)
 
 ## Growth Rule
@@ -42,4 +44,10 @@ system, use:
 
 - [Layered System View](/Users/chris/Documents/Universidad/TFG/docs/system/layered-system-view.md)
 - [System Blocks And Responsibilities](/Users/chris/Documents/Universidad/TFG/docs/system/system-blocks.md)
+- [Main Simulator Interfaces](/Users/chris/Documents/Universidad/TFG/docs/system/system-interfaces.md)
 - [Physical Boundary And Drone Context](/Users/chris/Documents/Universidad/TFG/docs/system/physical-boundary.md)
+
+For decision-oriented reading, continue from those documents into:
+
+- [Software Contracts And Traceability](/Users/chris/Documents/Universidad/TFG/docs/software/software-contracts-and-traceability.md)
+- [Technical Rationale Map](/Users/chris/Documents/Universidad/TFG/docs/validation/technical-rationale-map.md)
