@@ -30,21 +30,31 @@ Global simplifications that apply across the documentation:
 Start here, then choose the next path based on your question:
 
 - Project and documentation structure:
+  - [Overview Landing Page](/Users/chris/Documents/Universidad/TFG/docs/overview/README.md)
+  - [Document Conventions](/Users/chris/Documents/Universidad/TFG/docs/overview/document_conventions.md)
   - [Documentation Inventory](/Users/chris/Documents/Universidad/TFG/docs/documentation_inventory.md)
   - [Documentation Map](/Users/chris/Documents/Universidad/TFG/docs/documentation_map.md)
   - [PRD: Documentacion Integral Del TFG](/Users/chris/Documents/Universidad/TFG/docs/PRD_documentacion_integral_tfg.md)
 - Architecture and current system state:
+  - [System Landing Page](/Users/chris/Documents/Universidad/TFG/docs/system/README.md)
   - [Estado Actual Del Simulador](/Users/chris/Documents/Universidad/TFG/docs/estado_actual_simulador.md)
   - [Extension Points](/Users/chris/Documents/Universidad/TFG/docs/extension-points.md)
   - [ADRs](/Users/chris/Documents/Universidad/TFG/docs/decisions)
 - Theory and modeling basis:
+  - [Theory Landing Page](/Users/chris/Documents/Universidad/TFG/docs/theory/README.md)
   - current theory is still embedded in [PRD Phase 1](/Users/chris/Documents/Universidad/TFG/docs/PRD_phase1_simulador_multirotor.md), [PRD Phase 2](/Users/chris/Documents/Universidad/TFG/docs/PRD_phase2_control_neuronal.md), and the relevant ADRs
 - Hardware context:
+  - [Hardware Landing Page](/Users/chris/Documents/Universidad/TFG/docs/hardware/README.md)
   - [Dron Fisico](/Users/chris/Documents/Universidad/TFG/docs/Dron_fisico.md)
+- Software design:
+  - [Software Landing Page](/Users/chris/Documents/Universidad/TFG/docs/software/README.md)
 - Validation and experimental support:
+  - [Validation Landing Page](/Users/chris/Documents/Universidad/TFG/docs/validation/README.md)
   - [Reference Scenarios](/Users/chris/Documents/Universidad/TFG/docs/reference_scenarios.md)
   - [Phase 2 Dataset Specification](/Users/chris/Documents/Universidad/TFG/docs/phase2-control-neuronal-dataset-spec.md)
   - [Phase 6 Robustness And Delivery](/Users/chris/Documents/Universidad/TFG/docs/phase6_robustness_and_delivery.md)
+- Reusable formats:
+  - [Templates Landing Page](/Users/chris/Documents/Universidad/TFG/docs/templates/README.md)
 
 ## Recommended Reading Order
 
@@ -67,16 +77,32 @@ For a new technical reader:
 - `validation`: reference scenarios, benchmark method, and methodological limits
 - `templates`: future reusable document formats
 
+## Folder Structure
+
+The Phase 2 structure now exists explicitly under `docs/`:
+
+- `overview/`
+- `theory/`
+- `system/`
+- `software/`
+- `hardware/`
+- `decisions/`
+- `validation/`
+- `templates/`
+
+Existing root-level documents remain accessible while the new views grow around them.
+The conventions for naming, placement, and cross-links live in [Document Conventions](/Users/chris/Documents/Universidad/TFG/docs/overview/document_conventions.md).
+
 ## Current State Of The Documentation System
 
-Phase 1 establishes the map and the entry point, but it does not yet complete the folder reorganization.
+Phase 2 establishes the base folders and templates, but it does not yet populate the deeper technical content planned for later phases.
 That means some views already have strong source documents, while others are still represented by seed documents:
 
-- `overview` now has an explicit entry point and map
+- `overview` now has an explicit entry point, map, and conventions
 - `decisions` is already mature through ADRs
-- `system` currently starts from `estado_actual_simulador.md`
-- `hardware` currently starts from `Dron_fisico.md`
-- `theory`, `software`, `validation`, and `templates` still need fuller dedicated structures in later phases
+- `system` currently starts from `docs/system/README.md` and `estado_actual_simulador.md`
+- `hardware` currently starts from `docs/hardware/README.md` and `Dron_fisico.md`
+- `theory`, `software`, `validation`, and `templates` now have explicit landing pages and reusable templates, but still need fuller dedicated content in later phases
 
 ## Reading Caution
 

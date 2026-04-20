@@ -131,14 +131,14 @@ The map is intended to be navigated like this:
 
 | View | Current main seeds |
 |---|---|
-| `overview` | `docs/README.md`, `docs/documentation_inventory.md`, `docs/documentation_map.md`, `docs/PRD_documentacion_integral_tfg.md` |
-| `theory` | no dedicated seed yet; theory currently lives inside PRDs and ADRs |
-| `system` | `docs/estado_actual_simulador.md` |
-| `software` | `docs/extension-points.md`, `docs/phase2-control-neuronal-dataset-spec.md` |
-| `hardware` | `docs/Dron_fisico.md` |
+| `overview` | `docs/README.md`, `docs/overview/README.md`, `docs/overview/document_conventions.md`, `docs/documentation_inventory.md`, `docs/documentation_map.md`, `docs/PRD_documentacion_integral_tfg.md` |
+| `theory` | `docs/theory/README.md`, plus theory currently embedded inside PRDs and ADRs |
+| `system` | `docs/system/README.md`, `docs/estado_actual_simulador.md` |
+| `software` | `docs/software/README.md`, `docs/extension-points.md`, `docs/phase2-control-neuronal-dataset-spec.md` |
+| `hardware` | `docs/hardware/README.md`, `docs/Dron_fisico.md` |
 | `decisions` | `docs/decisions/ADR-001...017` |
-| `validation` | `docs/reference_scenarios.md`, `docs/phase6_robustness_and_delivery.md`, selected ADRs |
-| `templates` | no documents yet; reserved for Phase 2 |
+| `validation` | `docs/validation/README.md`, `docs/reference_scenarios.md`, `docs/phase6_robustness_and_delivery.md`, selected ADRs |
+| `templates` | `docs/templates/README.md` and Phase 2 base templates |
 
 ## Global Boundaries And Simplifications
 
