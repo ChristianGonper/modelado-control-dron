@@ -37,6 +37,9 @@ Start here, then choose the next path based on your question:
   - [PRD: Documentacion Integral Del TFG](/Users/chris/Documents/Universidad/TFG/docs/PRD_documentacion_integral_tfg.md)
 - Architecture and current system state:
   - [System Landing Page](/Users/chris/Documents/Universidad/TFG/docs/system/README.md)
+  - [Layered System View](/Users/chris/Documents/Universidad/TFG/docs/system/layered-system-view.md)
+  - [System Blocks And Responsibilities](/Users/chris/Documents/Universidad/TFG/docs/system/system-blocks.md)
+  - [Physical Boundary And Drone Context](/Users/chris/Documents/Universidad/TFG/docs/system/physical-boundary.md)
   - [Estado Actual Del Simulador](/Users/chris/Documents/Universidad/TFG/docs/estado_actual_simulador.md)
   - [Extension Points](/Users/chris/Documents/Universidad/TFG/docs/extension-points.md)
   - [ADRs](/Users/chris/Documents/Universidad/TFG/docs/decisions)

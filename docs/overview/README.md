@@ -25,9 +25,21 @@ It explains scope, reading order, documentation boundaries, and how the rest of 
 - [Document Conventions](/Users/chris/Documents/Universidad/TFG/docs/overview/document_conventions.md)
 - [Documentation Inventory](/Users/chris/Documents/Universidad/TFG/docs/documentation_inventory.md)
 - [Documentation Map](/Users/chris/Documents/Universidad/TFG/docs/documentation_map.md)
+- [Layered System View](/Users/chris/Documents/Universidad/TFG/docs/system/layered-system-view.md)
+- [System Blocks And Responsibilities](/Users/chris/Documents/Universidad/TFG/docs/system/system-blocks.md)
 - [PRD: Documentacion Integral Del TFG](/Users/chris/Documents/Universidad/TFG/docs/PRD_documentacion_integral_tfg.md)
 
 ## Growth Rule
 
 If a document mostly answers "how do I read, classify, or navigate the TFG documentation?", it belongs here.
 If it mostly explains the system itself, link to the appropriate view instead of extending `overview/`.
+
+## Bridge To System View
+
+The overview should direct the reader toward the system view, but should not
+duplicate it. For the current high-level explanation of the TFG as an engineered
+system, use:
+
+- [Layered System View](/Users/chris/Documents/Universidad/TFG/docs/system/layered-system-view.md)
+- [System Blocks And Responsibilities](/Users/chris/Documents/Universidad/TFG/docs/system/system-blocks.md)
+- [Physical Boundary And Drone Context](/Users/chris/Documents/Universidad/TFG/docs/system/physical-boundary.md)
