@@ -7,6 +7,7 @@ This folder documents the physical drone context that informs the simulator with
 ## Current Seeds
 
 - [Dron Fisico](/Users/chris/Documents/Universidad/TFG/docs/Dron_fisico.md)
+- [LiteWing Physical Context](/Users/chris/Documents/Universidad/TFG/docs/hardware/litewing-physical-context.md)
 - [Physical Subsystem Template](/Users/chris/Documents/Universidad/TFG/docs/templates/physical-subsystem-template.md)
 - [Physical Boundary And Drone Context](/Users/chris/Documents/Universidad/TFG/docs/system/physical-boundary.md)
 

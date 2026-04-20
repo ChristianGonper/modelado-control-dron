@@ -81,7 +81,12 @@ reproducible sin afirmar todavía equivalencia fuerte con el vuelo real."
 
 ## Enlaces relacionados
 
+- [Theory README](/Users/chris/Documents/Universidad/TFG/docs/theory/README.md)
+- [Rigid-Body 6DOF Dynamics And Reference Frames](/Users/chris/Documents/Universidad/TFG/docs/theory/rigid-body-6dof.md)
+- [Rotor Actuation, Mixer, And Simulation Time Bases](/Users/chris/Documents/Universidad/TFG/docs/theory/rotor-actuation-and-timebase.md)
+- [Aerodynamic Disturbances And Observability Limits](/Users/chris/Documents/Universidad/TFG/docs/theory/aerodynamic-disturbances-and-observability.md)
 - [Vista de sistema por capas](/Users/chris/Documents/Universidad/TFG/docs/system/layered-system-view.md)
 - [Bloques y responsabilidades principales](/Users/chris/Documents/Universidad/TFG/docs/system/system-blocks.md)
 - [Hardware README](/Users/chris/Documents/Universidad/TFG/docs/hardware/README.md)
+- [LiteWing Physical Context](/Users/chris/Documents/Universidad/TFG/docs/hardware/litewing-physical-context.md)
 - [Dron Físico](/Users/chris/Documents/Universidad/TFG/docs/Dron_fisico.md)
