@@ -53,6 +53,8 @@ Start here, then choose the next path based on your question:
   - [Software Landing Page](/Users/chris/Documents/Universidad/TFG/docs/software/README.md)
 - Validation and experimental support:
   - [Validation Landing Page](/Users/chris/Documents/Universidad/TFG/docs/validation/README.md)
+  - [Document Quality And Review Checklist](/Users/chris/Documents/Universidad/TFG/docs/validation/document-quality-and-review-checklist.md)
+  - [Thesis Mapping And Final Coherence Review](/Users/chris/Documents/Universidad/TFG/docs/validation/thesis-mapping-and-final-coherence-review.md)
   - [Reference Scenarios](/Users/chris/Documents/Universidad/TFG/docs/reference_scenarios.md)
   - [Phase 2 Dataset Specification](/Users/chris/Documents/Universidad/TFG/docs/phase2-control-neuronal-dataset-spec.md)
   - [Phase 6 Robustness And Delivery](/Users/chris/Documents/Universidad/TFG/docs/phase6_robustness_and_delivery.md)
@@ -105,7 +107,8 @@ That means some views already have strong source documents, while others are sti
 - `decisions` is already mature through ADRs
 - `system` currently starts from `docs/system/README.md` and `estado_actual_simulador.md`
 - `hardware` currently starts from `docs/hardware/README.md` and `Dron_fisico.md`
-- `theory`, `software`, `validation`, and `templates` now have explicit landing pages and reusable templates, but still need fuller dedicated content in later phases
+- `validation` now also includes review criteria, a reusable checklist, and a provisional thesis mapping for final closure
+- `templates` keeps the reusable formats that support future maintenance
 
 ## Reading Caution
 
