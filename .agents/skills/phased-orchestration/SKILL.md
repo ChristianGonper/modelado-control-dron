@@ -1,6 +1,6 @@
 ---
 name: phased-orchestration
-description: Coordinates a multi-phase implementation from a task-breakdown document while one orchestrator agent supervises dedicated phase workers. Use when the user explicitly wants orchestration, phased delegation, or one agent to stay in control across multiple phases, not when a single subagent is only implementing one assigned phase.
+description: Coordinator
 ---
 
 # Phased Orchestration
