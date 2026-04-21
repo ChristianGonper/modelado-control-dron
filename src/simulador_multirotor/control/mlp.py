@@ -647,10 +647,63 @@ def load_mlp_controller(path: str | Path) -> MLPController:
     return MLPController.from_checkpoint(load_mlp_checkpoint(path))
 
 
-def dump_checkpoint_summary(path: str | Path, checkpoint: MLPCheckpoint) -> Path:
+def checkpoint_summary_payload(
+    checkpoint: MLPCheckpoint,
+    *,
+    training_result: MLPTrainingResult | None = None,
+    checkpoint_path: str | Path | None = None,
+) -> dict[str, object]:
+    history = training_result.history if training_result is not None else checkpoint.history
+    if training_result is not None:
+        train_loss = training_result.train_loss
+        validation_loss = training_result.validation_loss
+        train_window_count = training_result.train_window_count
+        validation_window_count = training_result.validation_window_count
+    elif history:
+        last_entry = history[-1]
+        train_loss = last_entry.train_loss
+        validation_loss = last_entry.validation_loss
+        train_window_count = None
+        validation_window_count = None
+    else:
+        train_loss = None
+        validation_loss = None
+        train_window_count = None
+        validation_window_count = None
+    return {
+        "format_version": checkpoint.format_version,
+        "checkpoint_kind": "mlp",
+        "checkpoint_path": None if checkpoint_path is None else str(checkpoint_path),
+        "architecture": checkpoint.architecture.as_dict(),
+        "training": checkpoint.training.as_dict(),
+        "normalization": checkpoint.normalization.as_dict(),
+        "feature_names": list(checkpoint.feature_names),
+        "target_names": list(checkpoint.target_names),
+        "split_seed": checkpoint.split_seed,
+        "split_ratios": dict(checkpoint.split_ratios),
+        "metrics": {
+            "train_loss": train_loss,
+            "validation_loss": validation_loss,
+            "train_window_count": train_window_count,
+            "validation_window_count": validation_window_count,
+        },
+        "history": [entry.as_dict() for entry in history],
+    }
+
+
+def dump_checkpoint_summary(
+    path: str | Path,
+    checkpoint: MLPCheckpoint,
+    *,
+    training_result: MLPTrainingResult | None = None,
+    checkpoint_path: str | Path | None = None,
+) -> Path:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    summary = checkpoint.to_payload()
-    summary.pop("model_state_dict", None)
+    summary = checkpoint_summary_payload(
+        checkpoint,
+        training_result=training_result,
+        checkpoint_path=checkpoint_path,
+    )
     output_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return output_path

@@ -116,6 +116,25 @@ def _load_existing_dataset_manifest(output_dir: Path) -> Mapping[str, object]:
     return payload
 
 
+def _resolve_dataset_artifact_paths(path: str | Path) -> tuple[Path, Path, Path]:
+    artifact_path = Path(path)
+    if artifact_path.is_dir():
+        output_dir = artifact_path
+        dataset_path = output_dir / "dataset.json"
+        manifest_path = output_dir / "manifest.json"
+        summary_path = output_dir / "dataset-summary.md"
+    else:
+        dataset_path = artifact_path
+        output_dir = dataset_path.parent
+        manifest_path = output_dir / "manifest.json"
+        summary_path = output_dir / "dataset-summary.md"
+    if not dataset_path.exists():
+        raise DatasetArtifactError(f"dataset artifact does not exist: {dataset_path}")
+    if not manifest_path.exists():
+        raise DatasetArtifactError(f"dataset manifest does not exist: {manifest_path}")
+    return output_dir, dataset_path, manifest_path
+
+
 def _clear_managed_dataset_outputs(output_dir: Path) -> None:
     _load_existing_dataset_manifest(output_dir)
     for filename in DATASET_ARTIFACT_FILENAMES:
@@ -385,6 +404,34 @@ def _build_summary_markdown(dataset_payload: Mapping[str, object], manifest_payl
         ]
     )
     return "\n".join(lines)
+
+
+def load_dataset_preparation_artifact(path: str | Path) -> "DatasetPreparationResult":
+    output_dir, dataset_path, manifest_path = _resolve_dataset_artifact_paths(path)
+    try:
+        dataset_payload = json.loads(dataset_path.read_text(encoding="utf-8"))
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DatasetArtifactError(f"failed to read dataset artifact: {exc}") from exc
+    if not isinstance(dataset_payload, dict):
+        raise DatasetArtifactError("dataset artifact payload must be a mapping")
+    if not isinstance(manifest_payload, dict):
+        raise DatasetArtifactError("dataset manifest payload must be a mapping")
+    if dataset_payload.get("stage") != DATASET_STAGE or dataset_payload.get("artifact_kind") != DATASET_ARTIFACT_KIND:
+        raise DatasetArtifactError(f"dataset artifact is not a managed dataset preparation output: {path}")
+    if int(dataset_payload.get("schema_version", -1)) != DATASET_MANIFEST_SCHEMA_VERSION:
+        raise DatasetArtifactError(f"dataset artifact is not a managed dataset preparation output: {path}")
+    if manifest_payload.get("dataset_path") != str(dataset_path):
+        raise DatasetArtifactError(f"dataset artifact is not a managed dataset preparation output: {path}")
+    summary_path = output_dir / "dataset-summary.md"
+    return DatasetPreparationResult(
+        output_dir=output_dir,
+        dataset_path=dataset_path,
+        manifest_path=manifest_path,
+        summary_path=summary_path,
+        dataset_payload=dataset_payload,
+        manifest_payload=manifest_payload,
+    )
 
 
 @dataclass(frozen=True, slots=True)

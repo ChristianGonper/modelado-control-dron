@@ -19,7 +19,7 @@ from .extract import (
     load_dataset_episode,
     load_dataset_episodes,
 )
-from .artifacts import DatasetArtifactError, DatasetPreparationResult, prepare_dataset_artifacts
+from .artifacts import DatasetArtifactError, DatasetPreparationResult, load_dataset_preparation_artifact, prepare_dataset_artifacts
 from .split import (
     DEFAULT_SPLIT_RATIOS,
     MAIN_SPLIT_REGIME,
@@ -86,6 +86,7 @@ __all__ = [
     "feature_names_for_mode",
     "load_dataset_episode",
     "load_dataset_episodes",
+    "load_dataset_preparation_artifact",
     "prepare_dataset_artifacts",
     "split_dataset_episodes",
     "target_dimension",
