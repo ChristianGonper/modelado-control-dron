@@ -1,13 +1,32 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
+from simulador_multirotor.app import main
+from simulador_multirotor.control import (
+    MLPTrainingConfig,
+    RecurrentTrainingConfig,
+    train_gru_checkpoint,
+    train_lstm_checkpoint,
+    train_mlp_checkpoint,
+)
+from simulador_multirotor.dataset import load_dataset_episode
 from simulador_multirotor.metrics import compare_tracking_metrics, compute_tracking_metrics
+from simulador_multirotor.runner import SimulationRunner
 from simulador_multirotor.reporting import generate_phase5_report, select_best_neural_model
 from simulador_multirotor.core.contracts import TrajectoryReference, VehicleCommand, VehicleObservation, VehicleState
+from simulador_multirotor.scenarios import (
+    ScenarioDisturbanceConfig,
+    ScenarioMetadata,
+    ScenarioTimeConfig,
+    ScenarioTrajectoryConfig,
+    build_minimal_scenario,
+)
 from simulador_multirotor.telemetry import SimulationHistory, SimulationStep, TrackingError
+from simulador_multirotor.telemetry import export_history_to_json
 
 
 def _make_history(
@@ -235,6 +254,61 @@ def _benchmark_payload() -> dict[str, object]:
     }
 
 
+def _training_scenario(seed: int) -> object:
+    return replace(
+        build_minimal_scenario(seed=seed),
+        time=ScenarioTimeConfig(
+            duration_s=4.0,
+            physics_dt_s=0.01,
+            control_dt_s=0.02,
+            telemetry_dt_s=0.02,
+        ),
+        trajectory=ScenarioTrajectoryConfig(
+            kind="hover",
+            target_position_m=(0.0, 0.0, 1.0),
+            valid_until_s=4.0,
+            source="native",
+            parameters={"scenario": "phase5-report-training"},
+        ),
+        disturbances=ScenarioDisturbanceConfig(enabled=False),
+        metadata=ScenarioMetadata(name="phase5-report-training", seed=seed),
+    )
+
+
+def _training_episodes(tmp_path, seeds: tuple[int, ...]) -> tuple[object, ...]:
+    episodes = []
+    for index, seed in enumerate(seeds):
+        scenario = _training_scenario(seed)
+        history = SimulationRunner().run(scenario)
+        telemetry_path = export_history_to_json(history, tmp_path / f"telemetry-{index}.json")
+        episodes.append(load_dataset_episode(telemetry_path))
+    return tuple(episodes)
+
+
+def _train_reporting_checkpoints(tmp_path, *, workspace, run_id: str) -> dict[str, object]:
+    episodes = _training_episodes(tmp_path, (21, 22, 23))
+    mlp_result = train_mlp_checkpoint(
+        episodes,
+        checkpoint_path=workspace / run_id / "train" / "mlp" / "checkpoint.pt",
+        config=MLPTrainingConfig(seed=31, feature_mode="observation_plus_tracking_errors", epochs=2, batch_size=4, hidden_layers=(16, 8)),
+    )
+    gru_result = train_gru_checkpoint(
+        episodes,
+        checkpoint_path=workspace / run_id / "train" / "gru" / "checkpoint.pt",
+        config=RecurrentTrainingConfig(architecture="gru", seed=41, hidden_size=16, epochs=2, batch_size=4),
+    )
+    lstm_result = train_lstm_checkpoint(
+        episodes,
+        checkpoint_path=workspace / run_id / "train" / "lstm" / "checkpoint.pt",
+        config=RecurrentTrainingConfig(architecture="lstm", seed=51, hidden_size=16, epochs=2, batch_size=4),
+    )
+    return {
+        "mlp": mlp_result.checkpoint_path,
+        "gru": gru_result.checkpoint_path,
+        "lstm": lstm_result.checkpoint_path,
+    }
+
+
 def test_phase5_metrics_include_provenance_and_error_integrals() -> None:
     history = _make_history(
         position_targets=[1.0, 2.0],
@@ -312,3 +386,97 @@ def test_phase5_reporting_generates_table_figures_and_selection(tmp_path) -> Non
         for path in scenario_paths.values():
             assert path.exists()
             assert path.stat().st_size > 0
+
+
+def test_phase5_reporting_cli_generates_final_report_from_main_benchmark(tmp_path, capsys) -> None:
+    workspace = tmp_path / "artifacts" / "neural"
+    run_id = "phase5-report-cli"
+    _train_reporting_checkpoints(tmp_path, workspace=workspace, run_id=run_id)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "neural",
+            "benchmark",
+            "main",
+            "--workspace",
+            str(workspace),
+            "--run-id",
+            run_id,
+        ]
+    )
+    main_captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "methodology_policy: control=observed_state; evaluation=true_state" in main_captured.out
+
+    benchmark_path = workspace / run_id / "benchmark" / "main" / "benchmark.json"
+    exit_code = main(
+        [
+            "neural",
+            "report",
+            "final",
+            "--benchmark-path",
+            str(benchmark_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report_dir = workspace / run_id / "report" / "final"
+    report_text = (report_dir / "report.md").read_text(encoding="utf-8")
+    selection = json.loads((report_dir / "selection.json").read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert (report_dir / "comparison_table.md").exists()
+    assert (report_dir / "selection.json").exists()
+    assert (report_dir / "report.md").exists()
+    assert selection["selected_model_key"] in {"mlp", "gru", "lstm"}
+    assert "methodology_policy: control=observed_state; evaluation=true_state" in captured.out
+    assert "selection_policy: report generated from the persisted main benchmark only" in captured.out
+    assert "Control is computed from `observed_state` and tracking is evaluated on `true_state`." in report_text
+    assert "## Selected Model" in report_text
+
+
+def test_phase5_reporting_cli_help_mentions_main_vs_ood_boundary(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["neural", "report", "final", "--help"])
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 0
+    assert "OOD is excluded" in captured.out
+
+
+def test_phase5_reporting_cli_rejects_ood_benchmark(tmp_path, capsys) -> None:
+    workspace = tmp_path / "artifacts" / "neural"
+    run_id = "phase5-report-ood"
+    _train_reporting_checkpoints(tmp_path, workspace=workspace, run_id=run_id)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "neural",
+            "benchmark",
+            "ood",
+            "--workspace",
+            str(workspace),
+            "--run-id",
+            run_id,
+        ]
+    )
+    assert exit_code == 0
+    capsys.readouterr()
+
+    ood_benchmark_path = workspace / run_id / "benchmark" / "ood" / "ood-benchmark.json"
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "neural",
+                "report",
+                "final",
+                "--benchmark-path",
+                str(ood_benchmark_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "final report requires a persisted main benchmark" in captured.err

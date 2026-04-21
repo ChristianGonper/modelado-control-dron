@@ -15,9 +15,12 @@ from .runner import SimulationRunner
 from .scenarios import build_minimal_scenario, load_simulation_scenario
 from .benchmark import (
     MAIN_BENCHMARK_OUTPUT_NAME,
+    OOD_BENCHMARK_OUTPUT_NAME,
     build_main_benchmark_scenarios,
     persist_main_benchmark_artifacts,
+    persist_ood_benchmark_artifacts,
     run_homogeneous_neural_benchmark,
+    run_ood_robustness_benchmark,
 )
 from .dataset.artifacts import DatasetArtifactError, load_dataset_preparation_artifact, prepare_dataset_artifacts
 from .dataset import load_dataset_episodes
@@ -35,6 +38,7 @@ from .control.recurrent import (
     checkpoint_summary_payload as recurrent_checkpoint_summary_payload,
     dump_checkpoint_summary as dump_recurrent_checkpoint_summary,
 )
+from .reporting import generate_phase5_report
 from .telemetry import export_history_to_json
 from .visualization import load_telemetry_archive, render_analysis_outputs
 
@@ -121,14 +125,19 @@ def _resolve_training_output_dir(*, workspace: Path, run_id: str | None, output_
     return workspace / resolved_run_id / "train" / architecture, resolved_run_id
 
 
-def _resolve_benchmark_output_dir(*, workspace: Path, run_id: str | None, output_dir: Path | None) -> tuple[Path, str]:
+def _resolve_benchmark_output_dir(*, workspace: Path, run_id: str | None, output_dir: Path | None, benchmark_kind: str) -> tuple[Path, str]:
     resolved_run_id = str(run_id).strip() if run_id is not None and str(run_id).strip() else _generate_run_id()
     if output_dir is not None:
         return Path(output_dir), resolved_run_id
-    return workspace / resolved_run_id / "benchmark" / "main", resolved_run_id
+    return workspace / resolved_run_id / "benchmark" / benchmark_kind, resolved_run_id
 
 
-def _resolve_main_benchmark_checkpoint_paths(args: argparse.Namespace, parser: argparse.ArgumentParser) -> dict[str, Path]:
+def _resolve_benchmark_checkpoint_paths(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    *,
+    benchmark_label: str,
+) -> dict[str, Path]:
     explicit_paths = {
         "mlp": getattr(args, "mlp_checkpoint", None),
         "gru": getattr(args, "gru_checkpoint", None),
@@ -136,13 +145,13 @@ def _resolve_main_benchmark_checkpoint_paths(args: argparse.Namespace, parser: a
     }
     provided_explicit_paths = [path for path in explicit_paths.values() if path is not None]
     if provided_explicit_paths and len(provided_explicit_paths) != len(explicit_paths):
-        parser.error("benchmark main must use either all explicit checkpoint paths or resolve all three by convention")
+        parser.error(f"benchmark {benchmark_label} must use either all explicit checkpoint paths or resolve all three by convention")
 
     if provided_explicit_paths:
         resolved_paths = {key: Path(path) for key, path in explicit_paths.items()}
     else:
         if args.run_id is None or not str(args.run_id).strip():
-            parser.error("benchmark main requires --run-id when checkpoints are resolved by convention")
+            parser.error(f"benchmark {benchmark_label} requires --run-id when checkpoints are resolved by convention")
         workspace = Path(args.workspace)
         run_id = str(args.run_id).strip()
         resolved_paths = {
@@ -153,12 +162,32 @@ def _resolve_main_benchmark_checkpoint_paths(args: argparse.Namespace, parser: a
 
     missing_paths = [f"{key}: {path}" for key, path in resolved_paths.items() if not path.exists()]
     if missing_paths:
-        parser.error("benchmark main checkpoint does not exist: " + "; ".join(missing_paths))
+        parser.error(f"benchmark {benchmark_label} checkpoint does not exist: " + "; ".join(missing_paths))
 
     if len({path.resolve() for path in resolved_paths.values()}) != len(resolved_paths):
-        parser.error("benchmark main requires distinct checkpoints for mlp, gru, and lstm")
+        parser.error(f"benchmark {benchmark_label} requires distinct checkpoints for mlp, gru, and lstm")
 
     return resolved_paths
+
+
+def _resolve_report_output_dir(*, benchmark_path: Path, output_dir: Path | None) -> Path:
+    if output_dir is not None:
+        return Path(output_dir)
+
+    resolved_benchmark_path = Path(benchmark_path)
+    benchmark_parent = resolved_benchmark_path.parent
+    if benchmark_parent.name in {"main", "ood"} and benchmark_parent.parent.name == "benchmark":
+        return benchmark_parent.parent.parent / "report" / "final"
+    return benchmark_parent / "report" / "final"
+
+
+def _load_benchmark_payload(benchmark_path: Path) -> dict[str, object]:
+    if not benchmark_path.exists():
+        raise ValueError(f"benchmark does not exist: {benchmark_path}")
+    payload = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"benchmark payload must be a JSON object: {benchmark_path}")
+    return payload
 
 
 def _load_dataset_artifact_for_training(dataset_path: Path) -> DatasetPreparationResult:
@@ -539,12 +568,13 @@ def _run_inspect_checkpoint_command(args: argparse.Namespace, parser: argparse.A
 
 def _run_main_benchmark_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     try:
-        checkpoint_paths = _resolve_main_benchmark_checkpoint_paths(args, parser)
+        checkpoint_paths = _resolve_benchmark_checkpoint_paths(args, parser, benchmark_label="main")
         workspace = Path(args.workspace)
         output_dir, run_id = _resolve_benchmark_output_dir(
             workspace=workspace,
             run_id=args.run_id,
             output_dir=args.output_dir,
+            benchmark_kind="main",
         )
         output_dir.mkdir(parents=True, exist_ok=True)
         benchmark_path = output_dir / MAIN_BENCHMARK_OUTPUT_NAME
@@ -576,6 +606,74 @@ def _run_main_benchmark_command(args: argparse.Namespace, parser: argparse.Argum
     print(f"gru_checkpoint: {checkpoint_paths['gru']}")
     print(f"lstm_checkpoint: {checkpoint_paths['lstm']}")
     print(f"scenario_set_key: {benchmark.scenario_set_key}")
+    print("methodology_policy: control=observed_state; evaluation=true_state")
+    print("selection_policy: main benchmark is the only selection benchmark")
+    return 0
+
+
+def _run_ood_benchmark_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        checkpoint_paths = _resolve_benchmark_checkpoint_paths(args, parser, benchmark_label="ood")
+        workspace = Path(args.workspace)
+        output_dir, run_id = _resolve_benchmark_output_dir(
+            workspace=workspace,
+            run_id=args.run_id,
+            output_dir=args.output_dir,
+            benchmark_kind="ood",
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        benchmark_path = output_dir / OOD_BENCHMARK_OUTPUT_NAME
+        benchmark = run_ood_robustness_benchmark(
+            mlp_checkpoint_path=checkpoint_paths["mlp"],
+            gru_checkpoint_path=checkpoint_paths["gru"],
+            lstm_checkpoint_path=checkpoint_paths["lstm"],
+            output_path=benchmark_path,
+            command="multirotor-sim neural benchmark ood",
+            argv=getattr(args, "argv", ()),
+        )
+        artifact_paths = persist_ood_benchmark_artifacts(
+            benchmark,
+            output_dir=output_dir,
+            command="multirotor-sim neural benchmark ood",
+            argv=getattr(args, "argv", ()),
+            run_id=run_id,
+        )
+    except (DatasetArtifactError, ValueError, OSError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+
+    print(f"benchmark_path: {artifact_paths['benchmark_path']}")
+    print(f"benchmark_manifest: {artifact_paths['manifest_path']}")
+    print(f"benchmark_summary: {artifact_paths['summary_path']}")
+    print(f"benchmark_run_id: {run_id}")
+    print(f"mlp_checkpoint: {checkpoint_paths['mlp']}")
+    print(f"gru_checkpoint: {checkpoint_paths['gru']}")
+    print(f"lstm_checkpoint: {checkpoint_paths['lstm']}")
+    print(f"scenario_set_key: {benchmark.scenario_set_key}")
+    print("methodology_policy: control=observed_state; evaluation=true_state")
+    print("selection_policy: OOD is separate and must not be used for tuning or model selection")
+    return 0
+
+
+def _run_final_report_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        benchmark_path = Path(args.benchmark_path)
+        payload = _load_benchmark_payload(benchmark_path)
+        if payload.get("benchmark_kind") != "main":
+            raise ValueError("final report requires a persisted main benchmark; OOD artifacts are not eligible")
+        output_dir = _resolve_report_output_dir(benchmark_path=benchmark_path, output_dir=args.output_dir)
+        bundle = generate_phase5_report(benchmark_path, output_dir)
+    except (DatasetArtifactError, ValueError, OSError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+
+    print(f"benchmark_path: {bundle.benchmark_path}")
+    print(f"report_output_dir: {bundle.output_dir}")
+    print(f"report_table: {bundle.table_path}")
+    print(f"report_selection: {bundle.selection_path}")
+    print(f"report_summary: {bundle.report_path}")
+    print(f"report_figures_dir: {bundle.output_dir / 'figures'}")
+    print(f"selection_model: {json.loads(bundle.selection_path.read_text(encoding='utf-8'))['selected_model_key']}")
+    print("methodology_policy: control=observed_state; evaluation=true_state")
+    print("selection_policy: report generated from the persisted main benchmark only")
     return 0
 
 
@@ -691,7 +789,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     benchmark_parser = neural_subparsers.add_parser("benchmark", help="Run benchmark slices for trained neural controllers.")
     benchmark_subparsers = benchmark_parser.add_subparsers(dest="benchmark_command", required=True)
-    main_benchmark_parser = benchmark_subparsers.add_parser("main", help="Run the main benchmark against the reference battery.")
+    main_benchmark_parser = benchmark_subparsers.add_parser(
+        "main",
+        help="Run the main benchmark used for model selection.",
+        description="Run the main benchmark used for model selection.",
+    )
     main_benchmark_parser.add_argument("--workspace", type=Path, default=Path("artifacts/neural"), help="Root directory for neural-control artifacts.")
     main_benchmark_parser.add_argument("--run-id", type=str, default=None, help="Execution identifier for convention-based checkpoint resolution.")
     main_benchmark_parser.add_argument("--output-dir", type=Path, default=None, help="Override the benchmark output directory.")
@@ -699,6 +801,39 @@ def _build_parser() -> argparse.ArgumentParser:
     main_benchmark_parser.add_argument("--gru-checkpoint", type=Path, default=None, help="Explicit path to the trained GRU checkpoint.")
     main_benchmark_parser.add_argument("--lstm-checkpoint", type=Path, default=None, help="Explicit path to the trained LSTM checkpoint.")
     main_benchmark_parser.set_defaults(func=_run_main_benchmark_command)
+    ood_benchmark_parser = benchmark_subparsers.add_parser(
+        "ood",
+        help="Run the OOD robustness benchmark. Not for tuning or model selection.",
+        description="Run the OOD robustness benchmark. OOD is separate from the main benchmark and must not be used for tuning or model selection.",
+    )
+    ood_benchmark_parser.add_argument(
+        "--workspace",
+        type=Path,
+        default=Path("artifacts/neural"),
+        help="Root directory for neural-control artifacts. OOD is not for tuning or model selection.",
+    )
+    ood_benchmark_parser.add_argument("--run-id", type=str, default=None, help="Execution identifier for convention-based checkpoint resolution.")
+    ood_benchmark_parser.add_argument("--output-dir", type=Path, default=None, help="Override the OOD benchmark output directory.")
+    ood_benchmark_parser.add_argument("--mlp-checkpoint", type=Path, default=None, help="Explicit path to the trained MLP checkpoint.")
+    ood_benchmark_parser.add_argument("--gru-checkpoint", type=Path, default=None, help="Explicit path to the trained GRU checkpoint.")
+    ood_benchmark_parser.add_argument("--lstm-checkpoint", type=Path, default=None, help="Explicit path to the trained LSTM checkpoint.")
+    ood_benchmark_parser.set_defaults(func=_run_ood_benchmark_command)
+
+    report_parser = neural_subparsers.add_parser("report", help="Generate reports from persisted benchmark artifacts.")
+    report_subparsers = report_parser.add_subparsers(dest="report_command", required=True)
+    final_report_parser = report_subparsers.add_parser(
+        "final",
+        help="Generate the final report from a persisted main benchmark. OOD is excluded.",
+        description="Generate the final report from a persisted main benchmark. OOD is excluded from selection.",
+    )
+    final_report_parser.add_argument(
+        "--benchmark-path",
+        type=Path,
+        required=True,
+        help="Path to the persisted main benchmark.json artifact. OOD is excluded from selection.",
+    )
+    final_report_parser.add_argument("--output-dir", type=Path, default=None, help="Override the final report output directory.")
+    final_report_parser.set_defaults(func=_run_final_report_command)
 
     inspect_parser = neural_subparsers.add_parser("inspect", help="Inspect a checkpoint artifact.")
     inspect_subparsers = inspect_parser.add_subparsers(dest="inspect_command", required=True)
@@ -741,7 +876,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return args.func(args, parser)
         if args.neural_command == "train" and args.train_command in {"mlp", "gru", "lstm"}:
             return args.func(args, parser)
-        if args.neural_command == "benchmark" and args.benchmark_command == "main":
+        if args.neural_command == "benchmark" and args.benchmark_command in {"main", "ood"}:
+            return args.func(args, parser)
+        if args.neural_command == "report" and args.report_command == "final":
             return args.func(args, parser)
         if args.neural_command == "inspect" and args.inspect_command == "checkpoint":
             return args.func(args, parser)

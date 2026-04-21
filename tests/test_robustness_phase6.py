@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
+import pytest
+
+from simulador_multirotor.app import main
 from simulador_multirotor.benchmark import run_ood_robustness_benchmark
 from simulador_multirotor.control import (
     MLPTrainingConfig,
@@ -54,6 +57,116 @@ def _training_episodes(tmp_path, seeds: tuple[int, ...]) -> tuple[object, ...]:
         telemetry_path = export_history_to_json(history, tmp_path / f"telemetry-{index}.json")
         episodes.append(load_dataset_episode(telemetry_path))
     return tuple(episodes)
+
+
+def _train_robustness_checkpoints(tmp_path, *, workspace, run_id: str) -> dict[str, object]:
+    episodes = _training_episodes(tmp_path, (11, 12, 13))
+    mlp_result = train_mlp_checkpoint(
+        episodes,
+        checkpoint_path=workspace / run_id / "train" / "mlp" / "checkpoint.pt",
+        config=MLPTrainingConfig(
+            seed=21,
+            feature_mode="observation_plus_tracking_errors",
+            window_size=30,
+            stride=10,
+            hidden_layers=(16, 8),
+            epochs=2,
+            batch_size=4,
+            learning_rate=1e-3,
+        ),
+    )
+    gru_result = train_gru_checkpoint(
+        episodes,
+        checkpoint_path=workspace / run_id / "train" / "gru" / "checkpoint.pt",
+        config=RecurrentTrainingConfig(
+            architecture="gru",
+            seed=31,
+            feature_mode="observation_plus_tracking_errors",
+            hidden_size=16,
+            epochs=2,
+            batch_size=4,
+            learning_rate=1e-3,
+        ),
+    )
+    lstm_result = train_lstm_checkpoint(
+        episodes,
+        checkpoint_path=workspace / run_id / "train" / "lstm" / "checkpoint.pt",
+        config=RecurrentTrainingConfig(
+            architecture="lstm",
+            seed=41,
+            feature_mode="observation_plus_tracking_errors",
+            hidden_size=16,
+            epochs=2,
+            batch_size=4,
+            learning_rate=1e-3,
+        ),
+    )
+    return {
+        "mlp": mlp_result.checkpoint_path,
+        "gru": gru_result.checkpoint_path,
+        "lstm": lstm_result.checkpoint_path,
+    }
+
+
+def test_neural_benchmark_ood_cli_help_mentions_method_boundary(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["neural", "benchmark", "ood", "--help"])
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 0
+    assert "not for tuning or model selection" in captured.out
+
+
+def test_neural_benchmark_ood_cli_persists_separate_artifacts(tmp_path, capsys) -> None:
+    workspace = tmp_path / "artifacts" / "neural"
+    run_id = "phase6-ood-cli"
+    checkpoint_paths = _train_robustness_checkpoints(tmp_path, workspace=workspace, run_id=run_id)
+    capsys.readouterr()
+
+    exit_code = main(
+        [
+            "neural",
+            "benchmark",
+            "main",
+            "--workspace",
+            str(workspace),
+            "--run-id",
+            run_id,
+        ]
+    )
+    main_captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "selection_policy: main benchmark is the only selection benchmark" in main_captured.out
+
+    exit_code = main(
+        [
+            "neural",
+            "benchmark",
+            "ood",
+            "--workspace",
+            str(workspace),
+            "--run-id",
+            run_id,
+        ]
+    )
+
+    captured = capsys.readouterr()
+    main_dir = workspace / run_id / "benchmark" / "main"
+    ood_dir = workspace / run_id / "benchmark" / "ood"
+    ood_payload = json.loads((ood_dir / "ood-benchmark.json").read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert (main_dir / "benchmark.json").exists()
+    assert (main_dir / "manifest.json").exists()
+    assert (main_dir / "benchmark-summary.md").exists()
+    assert (ood_dir / "ood-benchmark.json").exists()
+    assert (ood_dir / "ood-manifest.json").exists()
+    assert (ood_dir / "ood-benchmark-summary.md").exists()
+    assert main_dir != ood_dir
+    assert ood_payload["benchmark_kind"] == "ood"
+    assert ood_payload["scenario_set_key"] == OOD_ROBUSTNESS_SCENARIO_SET_KEY
+    assert ood_payload["checkpoint_paths"] == {key: str(path) for key, path in checkpoint_paths.items()}
+    assert "selection_policy: OOD is separate and must not be used for tuning or model selection" in captured.out
 
 
 def test_ood_battery_is_explicit_and_distinct_from_main_splits() -> None:

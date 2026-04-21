@@ -25,6 +25,9 @@ BENCHMARK_MANIFEST_SCHEMA_VERSION = 1
 MAIN_BENCHMARK_OUTPUT_NAME = "benchmark.json"
 MAIN_BENCHMARK_SUMMARY_NAME = "benchmark-summary.md"
 MAIN_BENCHMARK_MANIFEST_NAME = "manifest.json"
+OOD_BENCHMARK_OUTPUT_NAME = "ood-benchmark.json"
+OOD_BENCHMARK_SUMMARY_NAME = "ood-benchmark-summary.md"
+OOD_BENCHMARK_MANIFEST_NAME = "ood-manifest.json"
 
 
 def build_main_benchmark_scenarios() -> tuple[SimulationScenario, ...]:
@@ -83,12 +86,26 @@ def _benchmark_summary_markdown(
     manifest_path: Path,
     summary_path: Path,
     checkpoint_artifacts: Mapping[str, Mapping[str, object]],
+    title: str = "# Main Benchmark Summary",
+    boundary_note: str | None = None,
 ) -> str:
     lines = [
-        "# Main Benchmark Summary",
+        title,
         "",
         "Control is computed from `observed_state` and tracking is evaluated on `true_state`.",
         "",
+    ]
+    if boundary_note is not None:
+        lines.extend(
+            [
+                "## Boundary",
+                "",
+                boundary_note,
+                "",
+            ]
+        )
+    lines.extend(
+        [
         f"- `benchmark_kind`: `{result.benchmark_kind}`",
         f"- `scenario_set_key`: `{result.scenario_set_key}`",
         f"- `benchmark_path`: `{result.output_path}`",
@@ -98,7 +115,8 @@ def _benchmark_summary_markdown(
         "",
         "## Checkpoints",
         "",
-    ]
+        ]
+    )
     for model_key in ("mlp", "gru", "lstm"):
         checkpoint_info = checkpoint_artifacts[model_key]
         lines.extend(
@@ -178,6 +196,62 @@ def persist_main_benchmark_artifacts(
             manifest_path=manifest_path,
             summary_path=summary_path,
             checkpoint_artifacts=checkpoint_artifacts,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "manifest_path": manifest_path,
+        "summary_path": summary_path,
+        "benchmark_path": result.output_path,
+    }
+
+
+def persist_ood_benchmark_artifacts(
+    result: "NeuralBenchmarkResult",
+    *,
+    output_dir: str | Path,
+    command: str,
+    argv: Sequence[str],
+    run_id: str,
+) -> dict[str, Path]:
+    resolved_output_dir = Path(output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = resolved_output_dir / OOD_BENCHMARK_MANIFEST_NAME
+    summary_path = resolved_output_dir / OOD_BENCHMARK_SUMMARY_NAME
+    checkpoint_artifacts = {
+        model_key: _checkpoint_artifact_payload(result.checkpoint_paths[model_key])
+        for model_key in ("mlp", "gru", "lstm")
+    }
+    manifest_payload = {
+        "schema_version": BENCHMARK_MANIFEST_SCHEMA_VERSION,
+        "artifact_kind": BENCHMARK_ARTIFACT_KIND,
+        "stage": BENCHMARK_STAGE,
+        "benchmark_kind": result.benchmark_kind,
+        "scenario_set_key": result.scenario_set_key,
+        "run_id": run_id,
+        "created_at": result.created_at or _utc_timestamp(),
+        "command": command,
+        "argv": list(argv),
+        "output_path": str(manifest_path),
+        "benchmark_path": str(result.output_path),
+        "benchmark_output_dir": str(resolved_output_dir),
+        "checkpoint_paths": {key: str(value) for key, value in result.checkpoint_paths.items()},
+        "checkpoint_artifacts": checkpoint_artifacts,
+        "scenario_count": len(result.results),
+        "scenario_names": [
+            _scenario_name_from_payload(scenario_result.scenario, index=index)
+            for index, scenario_result in enumerate(result.results, start=1)
+        ],
+    }
+    manifest_path.write_text(_json_dump(manifest_payload) + "\n", encoding="utf-8")
+    summary_path.write_text(
+        _benchmark_summary_markdown(
+            result,
+            manifest_path=manifest_path,
+            summary_path=summary_path,
+            checkpoint_artifacts=checkpoint_artifacts,
+            title="# OOD Benchmark Summary",
+            boundary_note="This battery is separate from the main benchmark and is not used for tuning or model selection.",
         ),
         encoding="utf-8",
     )
@@ -515,6 +589,8 @@ def run_ood_robustness_benchmark(
     gru_checkpoint_path: str | Path,
     lstm_checkpoint_path: str | Path,
     output_path: str | Path,
+    command: str = "",
+    argv: Sequence[str] = (),
 ) -> NeuralBenchmarkResult:
     resolved_scenarios = build_ood_robustness_scenarios() if scenarios is None else tuple(scenarios)
     return _run_neural_benchmark(
@@ -525,4 +601,6 @@ def run_ood_robustness_benchmark(
         output_path=output_path,
         benchmark_kind="ood",
         scenario_set_key=OOD_ROBUSTNESS_SCENARIO_SET_KEY,
+        command=command,
+        argv=argv,
     )
