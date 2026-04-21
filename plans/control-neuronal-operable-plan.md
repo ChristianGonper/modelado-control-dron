@@ -21,19 +21,23 @@ Durable decisions that apply across all phases:
 
 ## Phase 1: CLI Base Y Convencion De Artefactos
 
+Esta fase cierra la base de diseño y documentación de la CLI neuronal. No afirma que la superficie exista todavía en `src/`; deja fijado el contrato para que la implementación posterior pueda seguir una convención ya aprobada. Las casillas de esta fase reflejan documentación y diseño completados, no una CLI neuronal ya implementada.
+
 **User stories**: 1, 2, 7, 17, 18, 19, 20, 24, 27, 30
 
 ### What to build
 
-Construir el primer slice vertical del flujo operable: una superficie CLI pública y coherente para el control neuronal, junto con una convención estable de carpetas, nombres de artefactos y mensajes de ejecución. Esta fase debe permitir descubrir el flujo, entender qué entra y qué sale en cada paso y ejecutar un recorrido mínimo sin scripts externos, aunque todavía no cubra todas las variantes del pipeline completo.
+Documentar el primer slice vertical del flujo operable: una superficie CLI pública y coherente para el control neuronal, junto con una convención estable de carpetas, nombres de artefactos y mensajes de ejecución. Esta fase debe dejar fijado cómo se descubrirá el flujo, qué entra y qué sale en cada paso y cuál será el recorrido mínimo, pero no presupone que esa superficie esté ya expuesta en `src/`.
 
 ### Acceptance criteria
 
-- [ ] Existe un espacio de comandos de control neuronal bajo el comando raíz del simulador.
-- [ ] La ayuda CLI describe claramente etapas, entradas, salidas, defaults y precondiciones del flujo.
-- [ ] La ejecución crea una convención reconocible para artefactos intermedios y finales sin mezclar dataset, checkpoints, benchmark y reportes.
-- [ ] Las validaciones de argumentos fallan pronto y con mensajes claros ante combinaciones inválidas o entradas incompletas.
-- [ ] Un usuario nuevo puede identificar desde la CLI cuál es el recorrido mínimo recomendado para empezar.
+- [x] Queda definido un espacio de comandos de control neuronal bajo el comando raíz del simulador.
+- [x] La ayuda CLI propuesta describe claramente etapas, entradas, salidas, defaults y precondiciones del flujo.
+- [x] Queda documentada una convención reconocible para artefactos intermedios y finales sin mezclar dataset, checkpoints, benchmark y reportes.
+- [x] Las validaciones de argumentos esperadas quedan especificadas para fallar pronto y con mensajes claros ante combinaciones inválidas o entradas incompletas.
+- [x] Un usuario nuevo puede identificar desde la documentación cuál es el recorrido mínimo recomendado para empezar.
+
+La base documental que fija esta fase vive en [docs/software/control-neuronal-cli-foundation.md](../docs/software/control-neuronal-cli-foundation.md) y en [docs/decisions/ADR-018-neural-cli-foundation-and-artifact-convention.md](../docs/decisions/ADR-018-neural-cli-foundation-and-artifact-convention.md).
 
 ---
 

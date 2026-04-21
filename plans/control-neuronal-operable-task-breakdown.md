@@ -17,22 +17,22 @@ Este breakdown convierte el plan del flujo operable de control neuronal en tarea
 
 ### Phase 1: CLI Foundation
 
-- [ ] Task 1: Inventariar capacidades internas reutilizables para el flujo CLI
-- [ ] Task 2: Disenar la superficie CLI neuronal y el contrato de argumentos
-- [ ] Task 3: Definir la convencion de artefactos y metadatos de ejecucion
+- [x] Task 1: Inventariar capacidades internas reutilizables para el flujo CLI
+- [x] Task 2: Disenar la superficie CLI neuronal y el contrato de argumentos
+- [x] Task 3: Definir la convencion de artefactos y metadatos de ejecucion
 
 ## Task 1: Inventariar capacidades internas reutilizables para el flujo CLI
 
 **Description:** Revisar y consolidar que partes del repositorio ya cubren dataset, entrenamiento, benchmarking, reporting e inspeccion de artefactos para evitar duplicacion. Esta tarea fija el mapa de reutilizacion sobre el que se apoyara toda la capa operable.
 
 **Acceptance criteria:**
-- [ ] Existe un inventario escrito de capacidades internas ya disponibles para dataset, `MLP`, `GRU`, `LSTM`, benchmark y reporting.
-- [ ] El inventario identifica huecos reales de operabilidad frente a la superficie publica actual del simulador.
-- [ ] Queda claro que partes deben exponerse por CLI y que partes solo necesitan adaptacion ligera.
+- [x] Existe un inventario escrito de capacidades internas ya disponibles para dataset, `MLP`, `GRU`, `LSTM`, benchmark y reporting.
+- [x] El inventario identifica huecos reales de operabilidad frente a la superficie publica actual del simulador.
+- [x] Queda claro que partes deben exponerse por CLI y que partes solo necesitan adaptacion ligera.
 
 **Verification:**
-- [ ] Revision manual: el inventario cubre `app.py`, `dataset`, `control`, `benchmark`, `reporting` y pruebas relevantes.
-- [ ] Revision manual: el inventario distingue entre codigo reutilizable, codigo que necesita adaptador y funcionalidades todavia no expuestas.
+- [x] Revision manual: el inventario cubre `app.py`, `dataset`, `control`, `benchmark`, `reporting` y pruebas relevantes.
+- [x] Revision manual: el inventario distingue entre codigo reutilizable, codigo que necesita adaptador y funcionalidades todavia no expuestas.
 
 **Dependencies:** None
 
@@ -40,6 +40,8 @@ Este breakdown convierte el plan del flujo operable de control neuronal en tarea
 - `plans/control-neuronal-operable-task-breakdown.md`
 - `plans/control-neuronal-operable-plan.md`
 - notas de apoyo en `docs/` si hacen falta
+- `docs/software/control-neuronal-cli-foundation.md`
+- `docs/decisions/ADR-018-neural-cli-foundation-and-artifact-convention.md`
 
 **Estimated scope:** Small: 1-2 files
 
@@ -48,19 +50,21 @@ Este breakdown convierte el plan del flujo operable de control neuronal en tarea
 **Description:** Definir la estructura de comandos del flujo neuronal dentro del comando raiz del simulador, incluyendo subcomandos, argumentos comunes, argumentos especificos por arquitectura y errores esperados. Esta tarea fija la API humana del producto antes de implementarla.
 
 **Acceptance criteria:**
-- [ ] Existe un diseno claro de subcomandos para dataset, entrenamiento individual, entrenamiento comparativo, benchmark principal, benchmark OOD, reporte e inspeccion.
-- [ ] Los argumentos comunes y especificos por arquitectura quedan definidos sin ambiguedad.
-- [ ] Quedan listados los errores de uso que deben validarse pronto desde CLI.
+- [x] Existe un diseno claro de subcomandos para dataset, entrenamiento individual, entrenamiento comparativo, benchmark principal, benchmark OOD, reporte e inspeccion.
+- [x] Los argumentos comunes y especificos por arquitectura quedan definidos sin ambiguedad.
+- [x] Quedan listados los errores de uso que deben validarse pronto desde CLI.
 
 **Verification:**
-- [ ] Revision manual: la superficie CLI cubre el flujo completo del PRD sin exigir scripts externos.
-- [ ] Revision manual: la nomenclatura de argumentos es consistente entre arquitecturas y etapas.
+- [x] Revision manual: la superficie CLI cubre el flujo completo del PRD sin exigir scripts externos.
+- [x] Revision manual: la nomenclatura de argumentos es consistente entre arquitecturas y etapas.
 
 **Dependencies:** Task 1
 
 **Files likely touched:**
 - `plans/control-neuronal-operable-task-breakdown.md`
 - documentacion de apoyo en `docs/`
+- `docs/software/control-neuronal-cli-foundation.md`
+- `docs/decisions/ADR-018-neural-cli-foundation-and-artifact-convention.md`
 
 **Estimated scope:** Small: 1-2 files
 
@@ -69,27 +73,29 @@ Este breakdown convierte el plan del flujo operable de control neuronal en tarea
 **Description:** Diseñar como se organizan carpetas, nombres y metadatos persistidos para que cada etapa del flujo deje salidas trazables y encadenables. Esta tarea debe evitar desde el principio mezcla entre dataset, checkpoints, benchmark y reportes.
 
 **Acceptance criteria:**
-- [ ] Existe una convencion escrita para rutas y nombres de artefactos por etapa.
-- [ ] La convencion deja claro que metadatos minimos deben persistirse en cada salida para trazabilidad.
-- [ ] El diseno distingue benchmark principal y benchmark OOD tambien a nivel de artefactos.
+- [x] Existe una convencion escrita para rutas y nombres de artefactos por etapa.
+- [x] La convencion deja claro que metadatos minimos deben persistirse en cada salida para trazabilidad.
+- [x] El diseno distingue benchmark principal y benchmark OOD tambien a nivel de artefactos.
 
 **Verification:**
-- [ ] Revision manual: la convencion permite localizar un dataset, un checkpoint y un reporte sin ambiguedad.
-- [ ] Revision manual: la convencion es compatible con el estilo actual del repositorio y con futuras campañas experimentales.
+- [x] Revision manual: la convencion permite localizar un dataset, un checkpoint y un reporte sin ambiguedad.
+- [x] Revision manual: la convencion es compatible con el estilo actual del repositorio y con futuras campañas experimentales.
 
 **Dependencies:** Task 2
 
 **Files likely touched:**
 - `plans/control-neuronal-operable-task-breakdown.md`
 - `docs/` o notas de convencion operativa
+- `docs/software/control-neuronal-cli-foundation.md`
+- `docs/decisions/ADR-018-neural-cli-foundation-and-artifact-convention.md`
 
 **Estimated scope:** Small: 1-2 files
 
 ### Checkpoint: CLI Foundation
 
-- [ ] Las tareas 1-3 dejan clara la base de reutilizacion, la superficie CLI y la convencion de artefactos
-- [ ] El flujo operable ya tiene una API humana definida antes de escribir implementacion
-- [ ] No hay ambiguedad sobre entradas, salidas ni metadatos de cada etapa
+- [x] Las tareas 1-3 dejan clara la base de reutilizacion, la superficie CLI y la convencion de artefactos
+- [x] El flujo operable ya tiene una API humana definida antes de escribir implementacion
+- [x] No hay ambiguedad sobre entradas, salidas ni metadatos de cada etapa
 
 ### Phase 2: Dataset Slice
 

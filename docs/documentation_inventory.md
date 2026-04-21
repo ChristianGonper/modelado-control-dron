@@ -34,6 +34,7 @@ Its role is to answer three questions:
 | `docs/PRD_phase2_control_neuronal.md` | Product definition for neural-control phase | historical | `overview` historical context + future traceability | Keep as the main planning record for Phase 2. |
 | `docs/Phase-2_Idea.md` | Early Phase 2 plan | historical | historical appendix | Keep only as early exploration context; it should not compete with the formal PRD. |
 | `docs/phase2-control-neuronal-dataset-spec.md` | Dataset contract | specialized | `software` + `validation` support | Keep as the current source for dataset semantics. |
+| `docs/software/control-neuronal-cli-foundation.md` | CLI neuronal foundation, argument contract, and artifact convention | specialized | `software` | Keep as the operational bridge between the internal neural pipeline and the public CLI surface. |
 | `docs/phase6_robustness_and_delivery.md` | OOD and delivery methodology | specialized | `validation` | Keep as methodology and reporting support. |
 | `docs/decisions/ADR-001-core-contracts.md` | Core simulator contracts | primary | `decisions` | Keep as accepted decision record. |
 | `docs/decisions/ADR-002-tracer-bullet-runner.md` | Runner baseline | primary | `decisions` | Keep as accepted decision record. |
@@ -83,6 +84,7 @@ Its role is to answer three questions:
 - Current supporting sources:
   - `docs/extension-points.md`
   - `docs/phase2-control-neuronal-dataset-spec.md`
+  - `docs/software/control-neuronal-cli-foundation.md`
   - ADR series in `docs/decisions/`
 - Gap: there is no software design overview that bridges repo structure, modules, and contracts
 
@@ -119,6 +121,7 @@ Its role is to answer three questions:
   - ADRs hold the "why"
   - specialized docs hold the operational contract
   - a future software view should absorb the high-level explanation and link out instead of repeating it
+- `docs/software/control-neuronal-cli-foundation.md` intentionally overlaps with `docs/software/software-contracts-and-traceability.md` on control and dataset boundaries, but it narrows the view to the public CLI surface, execution arguments, and artifact naming.
 - validation knowledge is split between `reference_scenarios.md`, `phase6_robustness_and_delivery.md`, and several ADRs, with no single validation landing page
 
 ## Evident Gaps
