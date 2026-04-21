@@ -132,7 +132,7 @@ def _resolve_dataset_artifact_paths(path: str | Path) -> tuple[Path, Path, Path]
         raise DatasetArtifactError(f"dataset artifact does not exist: {dataset_path}")
     if not manifest_path.exists():
         raise DatasetArtifactError(f"dataset manifest does not exist: {manifest_path}")
-    return output_dir, dataset_path, manifest_path
+    return output_dir.resolve(), dataset_path.resolve(), manifest_path.resolve()
 
 
 def _clear_managed_dataset_outputs(output_dir: Path) -> None:
@@ -421,7 +421,8 @@ def load_dataset_preparation_artifact(path: str | Path) -> "DatasetPreparationRe
         raise DatasetArtifactError(f"dataset artifact is not a managed dataset preparation output: {path}")
     if int(dataset_payload.get("schema_version", -1)) != DATASET_MANIFEST_SCHEMA_VERSION:
         raise DatasetArtifactError(f"dataset artifact is not a managed dataset preparation output: {path}")
-    if manifest_payload.get("dataset_path") != str(dataset_path):
+    manifest_dataset_path = manifest_payload.get("dataset_path")
+    if not isinstance(manifest_dataset_path, str) or Path(manifest_dataset_path).resolve() != dataset_path.resolve():
         raise DatasetArtifactError(f"dataset artifact is not a managed dataset preparation output: {path}")
     summary_path = output_dir / "dataset-summary.md"
     return DatasetPreparationResult(

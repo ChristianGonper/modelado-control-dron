@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -216,6 +217,50 @@ def test_neural_train_gru_cli_persists_checkpoint_summary_and_manifest(tmp_path,
     assert summary["metrics"]["validation_loss"] > 0.0
     assert manifest["architecture"] == "gru"
     assert manifest["checkpoint_path"] == str(checkpoint_path)
+
+
+def test_neural_train_cli_accepts_relative_dataset_directory(tmp_path, capsys, monkeypatch) -> None:
+    dataset_result = _prepare_dataset_artifact(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    relative_dataset_dir = dataset_result.output_dir.relative_to(tmp_path)
+    output_dir = Path("relative-train-mlp")
+
+    exit_code = main(
+        [
+            "neural",
+            "train",
+            "mlp",
+            "--dataset",
+            str(relative_dataset_dir),
+            "--output-dir",
+            str(output_dir),
+            "--seed",
+            "21",
+            "--split-seed",
+            "21",
+            "--feature-mode",
+            "observation_plus_tracking_errors",
+            "--window-size",
+            "30",
+            "--stride",
+            "10",
+            "--hidden-layers",
+            "16,8",
+            "--epochs",
+            "1",
+            "--batch-size",
+            "4",
+            "--learning-rate",
+            "0.001",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "checkpoint_path:" in captured.out
+    assert output_dir.joinpath("checkpoint.pt").exists()
+    assert output_dir.joinpath("training-manifest.json").exists()
 
 
 @pytest.mark.parametrize("architecture", ["mlp", "gru", "lstm"])

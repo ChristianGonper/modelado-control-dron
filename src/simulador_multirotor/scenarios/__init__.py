@@ -20,6 +20,7 @@ from .minimal import (
     build_baseline_vehicle_profile,
     build_minimal_scenario,
 )
+from .source_battery import SOURCE_BATTERY_GATE_ID, SOURCE_BATTERY_KEY, build_source_battery_scenarios, source_battery_protocol_summary
 from .io import load_simulation_scenario, load_simulation_scenario_dict, save_simulation_scenario
 from .reference import REFERENCE_SCENARIO_NAMES, REFERENCE_SCENARIO_VERSION, reference_scenario_path, reference_scenario_root
 from .schema import (
@@ -49,6 +50,8 @@ __all__ = [
     "BASELINE_ROTOR_THRUST_COEFFICIENT_NEWTON_PER_RAD_S2",
     "BaselineScenario",
     "MinimalScenario",
+    "SOURCE_BATTERY_GATE_ID",
+    "SOURCE_BATTERY_KEY",
     "REFERENCE_SCENARIO_NAMES",
     "REFERENCE_SCENARIO_VERSION",
     "SCENARIO_SCHEMA_VERSION",
@@ -62,9 +65,11 @@ __all__ = [
     "build_baseline_scenario",
     "build_baseline_vehicle_profile",
     "build_minimal_scenario",
+    "build_source_battery_scenarios",
     "load_simulation_scenario",
     "load_simulation_scenario_dict",
     "reference_scenario_path",
     "reference_scenario_root",
     "save_simulation_scenario",
+    "source_battery_protocol_summary",
 ]

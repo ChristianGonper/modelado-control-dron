@@ -40,7 +40,7 @@ from .control.recurrent import (
 )
 from .reporting import generate_phase5_report
 from .telemetry import export_history_to_json
-from .validation import PDValidationCriteria, run_pd_validation
+from .validation import PDValidationCriteria, run_pd_validation, run_source_battery
 from .visualization import load_telemetry_archive, render_analysis_outputs
 
 
@@ -721,6 +721,16 @@ def _build_parser() -> argparse.ArgumentParser:
     pd_validation_parser.add_argument("--seed", type=int, default=None, help="Seed the validation scenario metadata.")
     pd_validation_parser.add_argument("--overwrite", action="store_true", help="Replace an existing validation output directory if it already exists.")
     pd_validation_parser.set_defaults(func=_run_pd_validation_command)
+    source_battery_parser = validation_subparsers.add_parser(
+        "source-battery",
+        help="Persist the Phase 3 source telemetry battery used for dataset generation.",
+        description="Persist the Phase 3 source telemetry battery used for dataset generation.",
+    )
+    source_battery_parser.add_argument("--workspace", type=Path, default=Path("artifacts/validation"), help="Root directory for source battery artifacts.")
+    source_battery_parser.add_argument("--run-id", type=str, default=None, help="Explicit run identifier to use for the source battery artifact tree.")
+    source_battery_parser.add_argument("--output-dir", type=Path, default=None, help="Override the source battery output directory.")
+    source_battery_parser.add_argument("--overwrite", action="store_true", help="Replace an existing source battery output directory if it already exists.")
+    source_battery_parser.set_defaults(func=_run_source_battery_command)
 
     neural_parser = subparsers.add_parser("neural", help="Expose the neural-control workflow.")
     neural_subparsers = neural_parser.add_subparsers(dest="neural_command", required=True)
@@ -913,12 +923,37 @@ def _run_pd_validation_command(args: argparse.Namespace, parser: argparse.Argume
     return 0
 
 
+def _run_source_battery_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        bundle = run_source_battery(
+            workspace=args.workspace,
+            run_id=args.run_id,
+            output_dir=args.output_dir,
+            overwrite=args.overwrite,
+            command="multirotor-sim validation source-battery",
+            argv=getattr(args, "argv", ()),
+        )
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+
+    print(f"source_battery_output_dir: {bundle.output_dir}")
+    print(f"source_battery_path: {bundle.battery_path}")
+    print(f"source_battery_manifest: {bundle.manifest_path}")
+    print(f"source_battery_summary: {bundle.summary_path}")
+    print(f"source_battery_episode_count: {len(bundle.episodes)}")
+    print(f"source_battery_telemetry_count: {len(bundle.battery_payload['source_telemetry_paths'])}")
+    print("source_telemetry_policy: source battery is separate from the PD validation gate and intended for dataset preparation")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     args.argv = tuple(argv if argv is not None else sys.argv[1:])
     if getattr(args, "command", None) == "validation":
         if args.validation_command == "pd":
+            return args.func(args, parser)
+        if args.validation_command == "source-battery":
             return args.func(args, parser)
         parser.error("unsupported validation command")
     if getattr(args, "command", None) == "neural":
