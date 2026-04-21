@@ -13,6 +13,12 @@ from typing import Sequence
 from .metrics import compute_tracking_metrics
 from .runner import SimulationRunner
 from .scenarios import build_minimal_scenario, load_simulation_scenario
+from .benchmark import (
+    MAIN_BENCHMARK_OUTPUT_NAME,
+    build_main_benchmark_scenarios,
+    persist_main_benchmark_artifacts,
+    run_homogeneous_neural_benchmark,
+)
 from .dataset.artifacts import DatasetArtifactError, load_dataset_preparation_artifact, prepare_dataset_artifacts
 from .dataset import load_dataset_episodes
 from .control import (
@@ -113,6 +119,46 @@ def _resolve_training_output_dir(*, workspace: Path, run_id: str | None, output_
     if output_dir is not None:
         return Path(output_dir), resolved_run_id
     return workspace / resolved_run_id / "train" / architecture, resolved_run_id
+
+
+def _resolve_benchmark_output_dir(*, workspace: Path, run_id: str | None, output_dir: Path | None) -> tuple[Path, str]:
+    resolved_run_id = str(run_id).strip() if run_id is not None and str(run_id).strip() else _generate_run_id()
+    if output_dir is not None:
+        return Path(output_dir), resolved_run_id
+    return workspace / resolved_run_id / "benchmark" / "main", resolved_run_id
+
+
+def _resolve_main_benchmark_checkpoint_paths(args: argparse.Namespace, parser: argparse.ArgumentParser) -> dict[str, Path]:
+    explicit_paths = {
+        "mlp": getattr(args, "mlp_checkpoint", None),
+        "gru": getattr(args, "gru_checkpoint", None),
+        "lstm": getattr(args, "lstm_checkpoint", None),
+    }
+    provided_explicit_paths = [path for path in explicit_paths.values() if path is not None]
+    if provided_explicit_paths and len(provided_explicit_paths) != len(explicit_paths):
+        parser.error("benchmark main must use either all explicit checkpoint paths or resolve all three by convention")
+
+    if provided_explicit_paths:
+        resolved_paths = {key: Path(path) for key, path in explicit_paths.items()}
+    else:
+        if args.run_id is None or not str(args.run_id).strip():
+            parser.error("benchmark main requires --run-id when checkpoints are resolved by convention")
+        workspace = Path(args.workspace)
+        run_id = str(args.run_id).strip()
+        resolved_paths = {
+            "mlp": workspace / run_id / "train" / "mlp" / "checkpoint.pt",
+            "gru": workspace / run_id / "train" / "gru" / "checkpoint.pt",
+            "lstm": workspace / run_id / "train" / "lstm" / "checkpoint.pt",
+        }
+
+    missing_paths = [f"{key}: {path}" for key, path in resolved_paths.items() if not path.exists()]
+    if missing_paths:
+        parser.error("benchmark main checkpoint does not exist: " + "; ".join(missing_paths))
+
+    if len({path.resolve() for path in resolved_paths.values()}) != len(resolved_paths):
+        parser.error("benchmark main requires distinct checkpoints for mlp, gru, and lstm")
+
+    return resolved_paths
 
 
 def _load_dataset_artifact_for_training(dataset_path: Path) -> DatasetPreparationResult:
@@ -491,6 +537,48 @@ def _run_inspect_checkpoint_command(args: argparse.Namespace, parser: argparse.A
     return 0
 
 
+def _run_main_benchmark_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        checkpoint_paths = _resolve_main_benchmark_checkpoint_paths(args, parser)
+        workspace = Path(args.workspace)
+        output_dir, run_id = _resolve_benchmark_output_dir(
+            workspace=workspace,
+            run_id=args.run_id,
+            output_dir=args.output_dir,
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        benchmark_path = output_dir / MAIN_BENCHMARK_OUTPUT_NAME
+        scenarios = build_main_benchmark_scenarios()
+        benchmark = run_homogeneous_neural_benchmark(
+            scenarios,
+            mlp_checkpoint_path=checkpoint_paths["mlp"],
+            gru_checkpoint_path=checkpoint_paths["gru"],
+            lstm_checkpoint_path=checkpoint_paths["lstm"],
+            output_path=benchmark_path,
+            command="multirotor-sim neural benchmark main",
+            argv=getattr(args, "argv", ()),
+        )
+        artifact_paths = persist_main_benchmark_artifacts(
+            benchmark,
+            output_dir=output_dir,
+            command="multirotor-sim neural benchmark main",
+            argv=getattr(args, "argv", ()),
+            run_id=run_id,
+        )
+    except (DatasetArtifactError, ValueError, OSError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+
+    print(f"benchmark_path: {artifact_paths['benchmark_path']}")
+    print(f"benchmark_manifest: {artifact_paths['manifest_path']}")
+    print(f"benchmark_summary: {artifact_paths['summary_path']}")
+    print(f"benchmark_run_id: {run_id}")
+    print(f"mlp_checkpoint: {checkpoint_paths['mlp']}")
+    print(f"gru_checkpoint: {checkpoint_paths['gru']}")
+    print(f"lstm_checkpoint: {checkpoint_paths['lstm']}")
+    print(f"scenario_set_key: {benchmark.scenario_set_key}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="multirotor-sim",
@@ -601,6 +689,17 @@ def _build_parser() -> argparse.ArgumentParser:
             architecture_parser.add_argument("--dropout", type=float, default=None, help="Recurrent dropout rate.")
         architecture_parser.set_defaults(func=lambda args, parser, architecture=architecture: _run_train_command(args, parser, architecture=architecture))
 
+    benchmark_parser = neural_subparsers.add_parser("benchmark", help="Run benchmark slices for trained neural controllers.")
+    benchmark_subparsers = benchmark_parser.add_subparsers(dest="benchmark_command", required=True)
+    main_benchmark_parser = benchmark_subparsers.add_parser("main", help="Run the main benchmark against the reference battery.")
+    main_benchmark_parser.add_argument("--workspace", type=Path, default=Path("artifacts/neural"), help="Root directory for neural-control artifacts.")
+    main_benchmark_parser.add_argument("--run-id", type=str, default=None, help="Execution identifier for convention-based checkpoint resolution.")
+    main_benchmark_parser.add_argument("--output-dir", type=Path, default=None, help="Override the benchmark output directory.")
+    main_benchmark_parser.add_argument("--mlp-checkpoint", type=Path, default=None, help="Explicit path to the trained MLP checkpoint.")
+    main_benchmark_parser.add_argument("--gru-checkpoint", type=Path, default=None, help="Explicit path to the trained GRU checkpoint.")
+    main_benchmark_parser.add_argument("--lstm-checkpoint", type=Path, default=None, help="Explicit path to the trained LSTM checkpoint.")
+    main_benchmark_parser.set_defaults(func=_run_main_benchmark_command)
+
     inspect_parser = neural_subparsers.add_parser("inspect", help="Inspect a checkpoint artifact.")
     inspect_subparsers = inspect_parser.add_subparsers(dest="inspect_command", required=True)
     checkpoint_parser = inspect_subparsers.add_parser("checkpoint", help="Inspect a single checkpoint.")
@@ -641,6 +740,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.neural_command == "dataset" and args.dataset_command == "prepare":
             return args.func(args, parser)
         if args.neural_command == "train" and args.train_command in {"mlp", "gru", "lstm"}:
+            return args.func(args, parser)
+        if args.neural_command == "benchmark" and args.benchmark_command == "main":
             return args.func(args, parser)
         if args.neural_command == "inspect" and args.inspect_command == "checkpoint":
             return args.func(args, parser)
