@@ -40,6 +40,7 @@ from .control.recurrent import (
 )
 from .reporting import generate_phase5_report
 from .telemetry import export_history_to_json
+from .validation import PDValidationCriteria, run_pd_validation
 from .visualization import load_telemetry_archive, render_analysis_outputs
 
 
@@ -707,6 +708,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command")
+    validation_parser = subparsers.add_parser("validation", help="Run validation gates for the simulator.")
+    validation_subparsers = validation_parser.add_subparsers(dest="validation_command", required=True)
+    pd_validation_parser = validation_subparsers.add_parser(
+        "pd",
+        help="Run the minimum PD validation gate for the official baseline.",
+        description="Run the minimum PD validation gate for the official baseline.",
+    )
+    pd_validation_parser.add_argument("--workspace", type=Path, default=Path("artifacts/validation"), help="Root directory for validation artifacts.")
+    pd_validation_parser.add_argument("--run-id", type=str, default=None, help="Explicit run identifier to use for the validation artifact tree.")
+    pd_validation_parser.add_argument("--output-dir", type=Path, default=None, help="Override the validation output directory.")
+    pd_validation_parser.add_argument("--seed", type=int, default=None, help="Seed the validation scenario metadata.")
+    pd_validation_parser.add_argument("--overwrite", action="store_true", help="Replace an existing validation output directory if it already exists.")
+    pd_validation_parser.set_defaults(func=_run_pd_validation_command)
+
     neural_parser = subparsers.add_parser("neural", help="Expose the neural-control workflow.")
     neural_subparsers = neural_parser.add_subparsers(dest="neural_command", required=True)
     dataset_parser = neural_subparsers.add_parser("dataset", help="Dataset preparation and registration.")
@@ -867,10 +882,45 @@ def _run_dataset_prepare_command(args: argparse.Namespace, parser: argparse.Argu
     return 0
 
 
+def _run_pd_validation_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        bundle = run_pd_validation(
+            seed=args.seed,
+            workspace=args.workspace,
+            run_id=args.run_id,
+            output_dir=args.output_dir,
+            overwrite=args.overwrite,
+            command="multirotor-sim validation pd",
+            argv=getattr(args, "argv", ()),
+            criteria=PDValidationCriteria(),
+        )
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+
+    result = bundle.result
+    print(f"validation_output_dir: {bundle.output_dir}")
+    print(f"validation_scenario: {bundle.scenario_path}")
+    print(f"validation_telemetry: {bundle.telemetry_path}")
+    print(f"validation_report: {bundle.report_path}")
+    print(f"validation_manifest: {bundle.manifest_path}")
+    print(f"validation_summary: {bundle.summary_path}")
+    print(f"validation_passed: {result.passed}")
+    print(f"validation_failure_count: {len(result.failures)}")
+    print(f"validation_gate_id: {result.gate_id}")
+    print(f"scenario_name: {result.scenario_name}")
+    print(f"scenario_seed: {result.scenario_seed}")
+    print("source_telemetry_policy: baseline metadata, controller metadata, and trajectory metadata are persisted")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     args.argv = tuple(argv if argv is not None else sys.argv[1:])
+    if getattr(args, "command", None) == "validation":
+        if args.validation_command == "pd":
+            return args.func(args, parser)
+        parser.error("unsupported validation command")
     if getattr(args, "command", None) == "neural":
         if args.neural_command == "dataset" and args.dataset_command == "prepare":
             return args.func(args, parser)
