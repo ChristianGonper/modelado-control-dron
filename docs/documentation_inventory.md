@@ -28,6 +28,7 @@ Its role is to answer three questions:
 | `docs/PRD_phase1_simulador_multirotor.md` | Product definition for simulator phase | historical | `overview` historical context + future traceability | Keep as the main planning record for Phase 1, not as the architectural overview. |
 | `docs/estado_actual_simulador.md` | Current delivered simulator capabilities | primary | `system` overview seed | Keep as the main current-state summary until dedicated system-view documents exist. |
 | `docs/reference_scenarios.md` | Reference scenario battery | specialized | `validation` | Keep as a validation/support document. |
+| `docs/phase1_baseline_dron_generico.md` | Phase 1 generic-drone baseline profile | specialized | `validation` | Keep as the baseline-specific reference for physical, control, and experimental campaign rules. |
 | `docs/extension-points.md` | Controller and dataset extension boundary | specialized | `software` or `system` support | Keep as implementation support until a fuller software view exists. |
 | `docs/backlog_tecnico.md` | Recommended technical backlog | specialized | `validation` or project-planning appendix | Keep as forward-looking context, not as core system documentation. |
 | `docs/Dron_fisico.md` | LiteWing physical platform context | primary | `hardware` | Keep as the seed of the hardware view, but rewrite later to align tone and cite project-specific relevance more explicitly. |
@@ -53,6 +54,7 @@ Its role is to answer three questions:
 | `docs/decisions/ADR-015-phase-3-mlp-checkpoint-and-benchmark.md` | MLP checkpoint and benchmark slice | primary | `decisions` | Keep as accepted decision record. |
 | `docs/decisions/ADR-016-phase-5-metrics-reporting-selection.md` | Reporting and model selection | primary | `decisions` + `validation` traceability | Keep as accepted decision record. |
 | `docs/decisions/ADR-017-phase-6-ood-robustness-and-delivery.md` | OOD robustness and delivery packaging | primary | `decisions` + `validation` traceability | Keep as accepted decision record. |
+| `docs/decisions/ADR-019-generic-baseline-profile.md` | Canonical generic-drone baseline profile | primary | `decisions` + `validation` traceability | Keep as accepted decision record. |
 
 ## Classification By View
 
@@ -122,7 +124,7 @@ Its role is to answer three questions:
   - specialized docs hold the operational contract
   - a future software view should absorb the high-level explanation and link out instead of repeating it
 - `docs/software/control-neuronal-cli-foundation.md` intentionally overlaps with `docs/software/software-contracts-and-traceability.md` on control and dataset boundaries, but it narrows the view to the public CLI surface, execution arguments, and artifact naming.
-- validation knowledge is split between `reference_scenarios.md`, `phase6_robustness_and_delivery.md`, and several ADRs, with no single validation landing page
+- validation knowledge is split between `reference_scenarios.md`, `phase1_baseline_dron_generico.md`, `phase6_robustness_and_delivery.md`, and several ADRs, with no single validation landing page
 
 ## Evident Gaps
 

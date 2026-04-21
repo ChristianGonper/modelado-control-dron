@@ -1,6 +1,25 @@
 """Scenario helpers for the simulator."""
 
-from .minimal import MinimalScenario, build_minimal_scenario
+from .minimal import (
+    BASELINE_ARM_LENGTH_M,
+    BASELINE_INERTIA_KG_M2,
+    BASELINE_MAX_BODY_TORQUE_NM,
+    BASELINE_MAX_COLLECTIVE_THRUST_NEWTON,
+    BASELINE_MASS_KG,
+    BASELINE_MOTOR_TIME_CONSTANT_S,
+    BASELINE_PROFILE_ID,
+    BASELINE_PROFILE_NAME,
+    BASELINE_PROFILE_TAGS,
+    BASELINE_ROTOR_MAX_ANGULAR_SPEED_RAD_S,
+    BASELINE_ROTOR_MOTOR_INERTIA_KG_M2,
+    BASELINE_ROTOR_REACTION_TORQUE_COEFFICIENT_NM_PER_NEWTON,
+    BASELINE_ROTOR_THRUST_COEFFICIENT_NEWTON_PER_RAD_S2,
+    BaselineScenario,
+    MinimalScenario,
+    build_baseline_scenario,
+    build_baseline_vehicle_profile,
+    build_minimal_scenario,
+)
 from .io import load_simulation_scenario, load_simulation_scenario_dict, save_simulation_scenario
 from .reference import REFERENCE_SCENARIO_NAMES, REFERENCE_SCENARIO_VERSION, reference_scenario_path, reference_scenario_root
 from .schema import (
@@ -15,6 +34,20 @@ from .schema import (
 )
 
 __all__ = [
+    "BASELINE_ARM_LENGTH_M",
+    "BASELINE_INERTIA_KG_M2",
+    "BASELINE_MAX_BODY_TORQUE_NM",
+    "BASELINE_MAX_COLLECTIVE_THRUST_NEWTON",
+    "BASELINE_MASS_KG",
+    "BASELINE_MOTOR_TIME_CONSTANT_S",
+    "BASELINE_PROFILE_ID",
+    "BASELINE_PROFILE_NAME",
+    "BASELINE_PROFILE_TAGS",
+    "BASELINE_ROTOR_MAX_ANGULAR_SPEED_RAD_S",
+    "BASELINE_ROTOR_MOTOR_INERTIA_KG_M2",
+    "BASELINE_ROTOR_REACTION_TORQUE_COEFFICIENT_NM_PER_NEWTON",
+    "BASELINE_ROTOR_THRUST_COEFFICIENT_NEWTON_PER_RAD_S2",
+    "BaselineScenario",
     "MinimalScenario",
     "REFERENCE_SCENARIO_NAMES",
     "REFERENCE_SCENARIO_VERSION",
@@ -26,6 +59,8 @@ __all__ = [
     "ScenarioTimeConfig",
     "ScenarioTrajectoryConfig",
     "SimulationScenario",
+    "build_baseline_scenario",
+    "build_baseline_vehicle_profile",
     "build_minimal_scenario",
     "load_simulation_scenario",
     "load_simulation_scenario_dict",
