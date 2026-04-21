@@ -35,6 +35,7 @@ Start here, then choose the next path based on your question:
   - [Documentation Inventory](/Users/chris/Documents/Universidad/TFG/docs/documentation_inventory.md)
   - [Documentation Map](/Users/chris/Documents/Universidad/TFG/docs/documentation_map.md)
   - [PRD: Documentacion Integral Del TFG](/Users/chris/Documents/Universidad/TFG/docs/PRD_documentacion_integral_tfg.md)
+  - [PRD: Flujo Operable De Control Neuronal](/Users/chris/Documents/Universidad/TFG/docs/PRD_control_neuronal_operable.md)
 - Architecture and current system state:
   - [System Landing Page](/Users/chris/Documents/Universidad/TFG/docs/system/README.md)
   - [Layered System View](/Users/chris/Documents/Universidad/TFG/docs/system/layered-system-view.md)
