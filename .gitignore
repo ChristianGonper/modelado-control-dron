@@ -7,3 +7,4 @@ analysis_outputs/
 *.egg-info/
 00_Problemas_encontrados/
 testing/
+artifacts
