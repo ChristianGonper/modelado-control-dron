@@ -28,12 +28,14 @@ Its role is to answer three questions:
 | `docs/PRD_phase1_simulador_multirotor.md` | Product definition for simulator phase | historical | `overview` historical context + future traceability | Keep as the main planning record for Phase 1, not as the architectural overview. |
 | `docs/estado_actual_simulador.md` | Current delivered simulator capabilities | primary | `system` overview seed | Keep as the main current-state summary until dedicated system-view documents exist. |
 | `docs/reference_scenarios.md` | Reference scenario battery | specialized | `validation` | Keep as a validation/support document. |
+| `docs/phase1_baseline_dron_generico.md` | Phase 1 generic-drone baseline profile | specialized | `validation` | Keep as the baseline-specific reference for physical, control, and experimental campaign rules. |
 | `docs/extension-points.md` | Controller and dataset extension boundary | specialized | `software` or `system` support | Keep as implementation support until a fuller software view exists. |
 | `docs/backlog_tecnico.md` | Recommended technical backlog | specialized | `validation` or project-planning appendix | Keep as forward-looking context, not as core system documentation. |
 | `docs/Dron_fisico.md` | LiteWing physical platform context | primary | `hardware` | Keep as the seed of the hardware view, but rewrite later to align tone and cite project-specific relevance more explicitly. |
 | `docs/PRD_phase2_control_neuronal.md` | Product definition for neural-control phase | historical | `overview` historical context + future traceability | Keep as the main planning record for Phase 2. |
 | `docs/Phase-2_Idea.md` | Early Phase 2 plan | historical | historical appendix | Keep only as early exploration context; it should not compete with the formal PRD. |
 | `docs/phase2-control-neuronal-dataset-spec.md` | Dataset contract | specialized | `software` + `validation` support | Keep as the current source for dataset semantics. |
+| `docs/software/control-neuronal-cli-foundation.md` | CLI neuronal foundation, argument contract, and artifact convention | specialized | `software` | Keep as the operational bridge between the internal neural pipeline and the public CLI surface. |
 | `docs/phase6_robustness_and_delivery.md` | OOD and delivery methodology | specialized | `validation` | Keep as methodology and reporting support. |
 | `docs/decisions/ADR-001-core-contracts.md` | Core simulator contracts | primary | `decisions` | Keep as accepted decision record. |
 | `docs/decisions/ADR-002-tracer-bullet-runner.md` | Runner baseline | primary | `decisions` | Keep as accepted decision record. |
@@ -52,6 +54,7 @@ Its role is to answer three questions:
 | `docs/decisions/ADR-015-phase-3-mlp-checkpoint-and-benchmark.md` | MLP checkpoint and benchmark slice | primary | `decisions` | Keep as accepted decision record. |
 | `docs/decisions/ADR-016-phase-5-metrics-reporting-selection.md` | Reporting and model selection | primary | `decisions` + `validation` traceability | Keep as accepted decision record. |
 | `docs/decisions/ADR-017-phase-6-ood-robustness-and-delivery.md` | OOD robustness and delivery packaging | primary | `decisions` + `validation` traceability | Keep as accepted decision record. |
+| `docs/decisions/ADR-019-generic-baseline-profile.md` | Canonical generic-drone baseline profile | primary | `decisions` + `validation` traceability | Keep as accepted decision record. |
 
 ## Classification By View
 
@@ -83,6 +86,7 @@ Its role is to answer three questions:
 - Current supporting sources:
   - `docs/extension-points.md`
   - `docs/phase2-control-neuronal-dataset-spec.md`
+  - `docs/software/control-neuronal-cli-foundation.md`
   - ADR series in `docs/decisions/`
 - Gap: there is no software design overview that bridges repo structure, modules, and contracts
 
@@ -119,7 +123,8 @@ Its role is to answer three questions:
   - ADRs hold the "why"
   - specialized docs hold the operational contract
   - a future software view should absorb the high-level explanation and link out instead of repeating it
-- validation knowledge is split between `reference_scenarios.md`, `phase6_robustness_and_delivery.md`, and several ADRs, with no single validation landing page
+- `docs/software/control-neuronal-cli-foundation.md` intentionally overlaps with `docs/software/software-contracts-and-traceability.md` on control and dataset boundaries, but it narrows the view to the public CLI surface, execution arguments, and artifact naming.
+- validation knowledge is split between `reference_scenarios.md`, `phase1_baseline_dron_generico.md`, `phase6_robustness_and_delivery.md`, and several ADRs, with no single validation landing page
 
 ## Evident Gaps
 

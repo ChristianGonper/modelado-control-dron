@@ -6,6 +6,8 @@ This folder gathers evaluation artifacts, scenario references, review criteria, 
 
 ## Current Seeds
 
+- [PD Validation Gate](/Users/chris/Documents/Universidad/TFG/docs/validation/pd-validation-gate.md)
+- [Source Telemetry Battery](/Users/chris/Documents/Universidad/TFG/docs/validation/source-telemetry-battery.md)
 - [Reference Scenarios](/Users/chris/Documents/Universidad/TFG/docs/reference_scenarios.md)
 - [Phase 6 Robustness And Delivery](/Users/chris/Documents/Universidad/TFG/docs/phase6_robustness_and_delivery.md)
 - [Technical Rationale Map](/Users/chris/Documents/Universidad/TFG/docs/validation/technical-rationale-map.md)

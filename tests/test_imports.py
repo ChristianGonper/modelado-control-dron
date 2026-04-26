@@ -12,6 +12,7 @@ def test_package_imports_are_available() -> None:
     import simulador_multirotor.robustness
     import simulador_multirotor.scenarios
     import simulador_multirotor.telemetry
+    import simulador_multirotor.validation
     import simulador_multirotor.trajectories
     import simulador_multirotor.visualization
 
@@ -26,3 +27,5 @@ def test_package_imports_are_available() -> None:
     assert simulador_multirotor.reporting.generate_phase5_report is not None
     assert simulador_multirotor.robustness.build_ood_robustness_scenarios is not None
     assert simulador_multirotor.visualization.TelemetryArchive is not None
+    assert simulador_multirotor.validation.build_pd_validation_scenario is not None
+    assert simulador_multirotor.validation.run_source_battery is not None

@@ -3,19 +3,272 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 import json
 from time import perf_counter
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .control.cascade import CascadedController
 from .control.mlp import load_mlp_controller
-from .control.recurrent import load_recurrent_controller
+from .control.recurrent import load_gru_controller, load_lstm_controller
 from .control.contract import ControllerContract
 from .metrics import compare_tracking_metrics, compute_tracking_metrics
 from .robustness import OOD_ROBUSTNESS_SCENARIO_SET_KEY, build_ood_robustness_scenarios
 from .runner import SimulationRunner
-from .scenarios import SimulationScenario
+from .scenarios import REFERENCE_SCENARIO_NAMES, SimulationScenario, load_simulation_scenario, reference_scenario_path
+
+
+BENCHMARK_STAGE = "benchmark"
+BENCHMARK_ARTIFACT_KIND = "benchmark"
+BENCHMARK_MANIFEST_SCHEMA_VERSION = 1
+MAIN_BENCHMARK_OUTPUT_NAME = "benchmark.json"
+MAIN_BENCHMARK_SUMMARY_NAME = "benchmark-summary.md"
+MAIN_BENCHMARK_MANIFEST_NAME = "manifest.json"
+OOD_BENCHMARK_OUTPUT_NAME = "ood-benchmark.json"
+OOD_BENCHMARK_SUMMARY_NAME = "ood-benchmark-summary.md"
+OOD_BENCHMARK_MANIFEST_NAME = "ood-manifest.json"
+
+
+def build_main_benchmark_scenarios() -> tuple[SimulationScenario, ...]:
+    return tuple(load_simulation_scenario(reference_scenario_path(name)) for name in REFERENCE_SCENARIO_NAMES)
+
+
+def _utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _json_dump(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2)
+
+
+def _load_json_file(path: Path) -> dict[str, object] | None:
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"benchmark sidecar must be a JSON object: {path}")
+    return payload
+
+
+def _checkpoint_artifact_payload(checkpoint_path: Path) -> dict[str, object]:
+    summary_path = checkpoint_path.with_name("checkpoint-summary.json")
+    manifest_path = checkpoint_path.with_name("training-manifest.json")
+    summary_payload = _load_json_file(summary_path)
+    manifest_payload = _load_json_file(manifest_path)
+    checkpoint_kind = None
+    training_payload: dict[str, object] | None = None
+    metrics_payload: dict[str, object] | None = None
+
+    if summary_payload is not None:
+        checkpoint_kind = summary_payload.get("checkpoint_kind")
+        training = summary_payload.get("training")
+        if isinstance(training, Mapping):
+            training_payload = dict(training)
+        metrics = summary_payload.get("metrics")
+        if isinstance(metrics, Mapping):
+            metrics_payload = dict(metrics)
+
+    return {
+        "checkpoint_path": str(checkpoint_path),
+        "checkpoint_summary_path": str(summary_path) if summary_path.exists() else None,
+        "training_manifest_path": str(manifest_path) if manifest_path.exists() else None,
+        "checkpoint_kind": checkpoint_kind,
+        "training": training_payload,
+        "metrics": metrics_payload,
+        "training_manifest": manifest_payload,
+    }
+
+
+def _benchmark_summary_markdown(
+    result: "NeuralBenchmarkResult",
+    *,
+    manifest_path: Path,
+    summary_path: Path,
+    checkpoint_artifacts: Mapping[str, Mapping[str, object]],
+    title: str = "# Main Benchmark Summary",
+    boundary_note: str | None = None,
+) -> str:
+    lines = [
+        title,
+        "",
+        "Control is computed from `observed_state` and tracking is evaluated on `true_state`.",
+        "",
+    ]
+    if boundary_note is not None:
+        lines.extend(
+            [
+                "## Boundary",
+                "",
+                boundary_note,
+                "",
+            ]
+        )
+    lines.extend(
+        [
+        f"- `benchmark_kind`: `{result.benchmark_kind}`",
+        f"- `scenario_set_key`: `{result.scenario_set_key}`",
+        f"- `benchmark_path`: `{result.output_path}`",
+        f"- `manifest_path`: `{manifest_path}`",
+        f"- `summary_path`: `{summary_path}`",
+        f"- `scenario_count`: `{len(result.results)}`",
+        "",
+        "## Checkpoints",
+        "",
+        ]
+    )
+    for model_key in ("mlp", "gru", "lstm"):
+        checkpoint_info = checkpoint_artifacts[model_key]
+        lines.extend(
+            [
+                f"### {model_key}",
+                f"- checkpoint: `{checkpoint_info['checkpoint_path']}`",
+                f"- checkpoint_summary: `{checkpoint_info['checkpoint_summary_path'] or 'n/a'}`",
+                f"- training_manifest: `{checkpoint_info['training_manifest_path'] or 'n/a'}`",
+            ]
+        )
+        training = checkpoint_info.get("training")
+        if isinstance(training, Mapping):
+            for field_name in ("architecture", "feature_mode", "window_size", "stride", "seed", "split_seed", "hidden_layers", "hidden_size", "num_layers", "dropout"):
+                if field_name in training:
+                    lines.append(f"- {field_name}: `{training[field_name]}`")
+        metrics = checkpoint_info.get("metrics")
+        if isinstance(metrics, Mapping):
+            for field_name in ("train_loss", "validation_loss", "train_window_count", "validation_window_count"):
+                if field_name in metrics:
+                    lines.append(f"- {field_name}: `{metrics[field_name]}`")
+        lines.append("")
+    lines.extend(
+        [
+            "## Scenarios",
+            "",
+        ]
+    )
+    for index, scenario_result in enumerate(result.results, start=1):
+        scenario = scenario_result.scenario
+        metadata = scenario.get("metadata", {}) if isinstance(scenario, Mapping) else {}
+        scenario_name = metadata.get("name", f"scenario-{index}") if isinstance(metadata, Mapping) else f"scenario-{index}"
+        lines.append(f"- `{scenario_name}`")
+    return "\n".join(lines) + "\n"
+
+
+def persist_main_benchmark_artifacts(
+    result: "NeuralBenchmarkResult",
+    *,
+    output_dir: str | Path,
+    command: str,
+    argv: Sequence[str],
+    run_id: str,
+) -> dict[str, Path]:
+    resolved_output_dir = Path(output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = resolved_output_dir / MAIN_BENCHMARK_MANIFEST_NAME
+    summary_path = resolved_output_dir / MAIN_BENCHMARK_SUMMARY_NAME
+    checkpoint_artifacts = {
+        model_key: _checkpoint_artifact_payload(result.checkpoint_paths[model_key])
+        for model_key in ("mlp", "gru", "lstm")
+    }
+    manifest_payload = {
+        "schema_version": BENCHMARK_MANIFEST_SCHEMA_VERSION,
+        "artifact_kind": BENCHMARK_ARTIFACT_KIND,
+        "stage": BENCHMARK_STAGE,
+        "benchmark_kind": result.benchmark_kind,
+        "scenario_set_key": result.scenario_set_key,
+        "run_id": run_id,
+        "created_at": result.created_at or _utc_timestamp(),
+        "command": command,
+        "argv": list(argv),
+        "output_path": str(manifest_path),
+        "benchmark_path": str(result.output_path),
+        "benchmark_output_dir": str(resolved_output_dir),
+        "checkpoint_paths": {key: str(value) for key, value in result.checkpoint_paths.items()},
+        "checkpoint_artifacts": checkpoint_artifacts,
+        "scenario_count": len(result.results),
+        "scenario_names": [
+            _scenario_name_from_payload(scenario_result.scenario, index=index)
+            for index, scenario_result in enumerate(result.results, start=1)
+        ],
+    }
+    manifest_path.write_text(_json_dump(manifest_payload) + "\n", encoding="utf-8")
+    summary_path.write_text(
+        _benchmark_summary_markdown(
+            result,
+            manifest_path=manifest_path,
+            summary_path=summary_path,
+            checkpoint_artifacts=checkpoint_artifacts,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "manifest_path": manifest_path,
+        "summary_path": summary_path,
+        "benchmark_path": result.output_path,
+    }
+
+
+def persist_ood_benchmark_artifacts(
+    result: "NeuralBenchmarkResult",
+    *,
+    output_dir: str | Path,
+    command: str,
+    argv: Sequence[str],
+    run_id: str,
+) -> dict[str, Path]:
+    resolved_output_dir = Path(output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = resolved_output_dir / OOD_BENCHMARK_MANIFEST_NAME
+    summary_path = resolved_output_dir / OOD_BENCHMARK_SUMMARY_NAME
+    checkpoint_artifacts = {
+        model_key: _checkpoint_artifact_payload(result.checkpoint_paths[model_key])
+        for model_key in ("mlp", "gru", "lstm")
+    }
+    manifest_payload = {
+        "schema_version": BENCHMARK_MANIFEST_SCHEMA_VERSION,
+        "artifact_kind": BENCHMARK_ARTIFACT_KIND,
+        "stage": BENCHMARK_STAGE,
+        "benchmark_kind": result.benchmark_kind,
+        "scenario_set_key": result.scenario_set_key,
+        "run_id": run_id,
+        "created_at": result.created_at or _utc_timestamp(),
+        "command": command,
+        "argv": list(argv),
+        "output_path": str(manifest_path),
+        "benchmark_path": str(result.output_path),
+        "benchmark_output_dir": str(resolved_output_dir),
+        "checkpoint_paths": {key: str(value) for key, value in result.checkpoint_paths.items()},
+        "checkpoint_artifacts": checkpoint_artifacts,
+        "scenario_count": len(result.results),
+        "scenario_names": [
+            _scenario_name_from_payload(scenario_result.scenario, index=index)
+            for index, scenario_result in enumerate(result.results, start=1)
+        ],
+    }
+    manifest_path.write_text(_json_dump(manifest_payload) + "\n", encoding="utf-8")
+    summary_path.write_text(
+        _benchmark_summary_markdown(
+            result,
+            manifest_path=manifest_path,
+            summary_path=summary_path,
+            checkpoint_artifacts=checkpoint_artifacts,
+            title="# OOD Benchmark Summary",
+            boundary_note="This battery is separate from the main benchmark and is not used for tuning or model selection.",
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "manifest_path": manifest_path,
+        "summary_path": summary_path,
+        "benchmark_path": result.output_path,
+    }
+
+
+def _scenario_name_from_payload(scenario: Mapping[str, object], *, index: int) -> str:
+    metadata = scenario.get("metadata")
+    if isinstance(metadata, Mapping):
+        name = metadata.get("name")
+        if name:
+            return str(name)
+    return f"scenario-{index}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +421,9 @@ class NeuralBenchmarkResult:
     checkpoint_paths: dict[str, Path]
     output_path: Path
     results: tuple[NeuralBenchmarkScenarioResult, ...]
+    created_at: str = ""
+    command: str = ""
+    argv: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -175,6 +431,9 @@ class NeuralBenchmarkResult:
             "scenario_set_key": self.scenario_set_key,
             "checkpoint_paths": {key: str(value) for key, value in self.checkpoint_paths.items()},
             "output_path": str(self.output_path),
+            "created_at": self.created_at,
+            "command": self.command,
+            "argv": list(self.argv),
             "results": [result.to_dict() for result in self.results],
         }
 
@@ -224,6 +483,8 @@ def _run_neural_benchmark(
     output_path: str | Path,
     benchmark_kind: str,
     scenario_set_key: str,
+    command: str = "",
+    argv: Sequence[str] = (),
 ) -> NeuralBenchmarkResult:
     scenarios = tuple(scenarios)
     if not scenarios:
@@ -238,8 +499,8 @@ def _run_neural_benchmark(
     }
 
     mlp_controller = load_mlp_controller(checkpoint_paths["mlp"])
-    gru_controller = load_recurrent_controller(checkpoint_paths["gru"])
-    lstm_controller = load_recurrent_controller(checkpoint_paths["lstm"])
+    gru_controller = load_gru_controller(checkpoint_paths["gru"])
+    lstm_controller = load_lstm_controller(checkpoint_paths["lstm"])
     runner = SimulationRunner()
     results: list[NeuralBenchmarkScenarioResult] = []
     for scenario in scenarios:
@@ -290,6 +551,9 @@ def _run_neural_benchmark(
         checkpoint_paths=checkpoint_paths,
         output_path=resolved_output_path,
         results=tuple(results),
+        created_at=_utc_timestamp(),
+        command=command,
+        argv=tuple(argv),
     )
     resolved_output_path.write_text(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return result
@@ -302,6 +566,8 @@ def run_homogeneous_neural_benchmark(
     gru_checkpoint_path: str | Path,
     lstm_checkpoint_path: str | Path,
     output_path: str | Path,
+    command: str = "",
+    argv: Sequence[str] = (),
 ) -> NeuralBenchmarkResult:
     return _run_neural_benchmark(
         scenarios,
@@ -311,6 +577,8 @@ def run_homogeneous_neural_benchmark(
         output_path=output_path,
         benchmark_kind="main",
         scenario_set_key="main-homogeneous-v1",
+        command=command,
+        argv=argv,
     )
 
 
@@ -321,6 +589,8 @@ def run_ood_robustness_benchmark(
     gru_checkpoint_path: str | Path,
     lstm_checkpoint_path: str | Path,
     output_path: str | Path,
+    command: str = "",
+    argv: Sequence[str] = (),
 ) -> NeuralBenchmarkResult:
     resolved_scenarios = build_ood_robustness_scenarios() if scenarios is None else tuple(scenarios)
     return _run_neural_benchmark(
@@ -331,4 +601,6 @@ def run_ood_robustness_benchmark(
         output_path=output_path,
         benchmark_kind="ood",
         scenario_set_key=OOD_ROBUSTNESS_SCENARIO_SET_KEY,
+        command=command,
+        argv=argv,
     )

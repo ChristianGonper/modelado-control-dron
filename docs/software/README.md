@@ -11,6 +11,7 @@ This folder will contain the code-facing design view of the project at module, i
 - [Control, Trajectories, and Dynamics](/Users/chris/Documents/Universidad/TFG/docs/software/control-trajectories-and-dynamics.md)
 - [Telemetry, Dataset, and Experimental Outputs](/Users/chris/Documents/Universidad/TFG/docs/software/telemetry-dataset-and-experimental-outputs.md)
 - [Main Interfaces and Classes](/Users/chris/Documents/Universidad/TFG/docs/software/main-interfaces-and-classes.md)
+- [Base Operativa De La CLI Neuronal](./control-neuronal-cli-foundation.md)
 
 ## Supporting Seeds
 
